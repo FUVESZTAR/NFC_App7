@@ -1,0 +1,146 @@
+package com.plantnfc.presentation.nfclist
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.plantnfc.domain.model.NfcRecord
+import com.plantnfc.domain.model.SyncStatus
+import com.plantnfc.domain.repository.NfcRecordRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+// ── ViewModel ─────────────────────────────────────────────────────────────────
+
+@HiltViewModel
+class NfcListViewModel @Inject constructor(
+    private val repo: NfcRecordRepository,
+) : ViewModel() {
+
+    private val _query   = MutableStateFlow("")
+    private val _syncing = MutableStateFlow(false)
+    private val _msg     = MutableStateFlow<String?>(null)
+
+    val state: StateFlow<NfcListState> = combine(repo.getAllRecords(), _query, _syncing, _msg) { records, q, syncing, msg ->
+        val filtered = if (q.isBlank()) records
+        else records.filter { r ->
+            r.plantName.contains(q, true) || r.variety.contains(q, true) ||
+            r.plantId.contains(q, true)   || r.nfcId.toString().contains(q)
+        }
+        NfcListState(filtered, q, syncing, msg)
+    }.stateIn(viewModelScope, SharingStarted.Lazily, NfcListState())
+
+    fun setQuery(q: String) = _query.update { q }
+    fun delete(id: Long) = viewModelScope.launch { repo.delete(id) }
+    fun syncUp() = viewModelScope.launch { _syncing.value = true; repo.syncToRemote(); _syncing.value = false; _msg.value = "Synced!" }
+    fun syncDown() = viewModelScope.launch { _syncing.value = true; repo.syncFromRemote(); _syncing.value = false; _msg.value = "Imported!" }
+    fun dismissMsg() = _msg.update { null }
+}
+
+data class NfcListState(
+    val records: List<NfcRecord> = emptyList(),
+    val query: String = "",
+    val syncing: Boolean = false,
+    val message: String? = null,
+)
+
+// ── Screen ────────────────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NfcListScreen(
+    onBack: () -> Unit,
+    vm: NfcListViewModel = hiltViewModel(),
+) {
+    val state by vm.state.collectAsState()
+    val snackbarHost = remember { SnackbarHostState() }
+
+    LaunchedEffect(state.message) {
+        state.message?.let { snackbarHost.showSnackbar(it); vm.dismissMsg() }
+    }
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHost) },
+        topBar = {
+            TopAppBar(
+                title = { Text("📋 NFC Records") },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") } },
+                actions = {
+                    if (state.syncing) {
+                        CircularProgressIndicator(Modifier.size(24.dp).padding(end = 8.dp), strokeWidth = 2.dp)
+                    } else {
+                        IconButton(onClick = { vm.syncUp() })   { Icon(Icons.Default.CloudUpload, "Upload") }
+                        IconButton(onClick = { vm.syncDown() }) { Icon(Icons.Default.CloudDownload, "Download") }
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        Column(Modifier.padding(padding)) {
+            OutlinedTextField(
+                value = state.query,
+                onValueChange = vm::setQuery,
+                label = { Text("Search…") },
+                leadingIcon = { Icon(Icons.Default.Search, null) },
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                singleLine = true,
+            )
+            if (state.records.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No records yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(state.records, key = { it.id }) { record ->
+                        RecordCard(record) { vm.delete(record.id) }
+                    }
+                    item { Spacer(Modifier.height(32.dp)) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecordCard(record: NfcRecord, onDelete: () -> Unit) {
+    var showConfirm by remember { mutableStateOf(false) }
+    if (showConfirm) {
+        AlertDialog(
+            onDismissRequest = { showConfirm = false },
+            title = { Text("Delete?") },
+            text = { Text("NFC #${record.nfcId} – ${record.plantName}") },
+            confirmButton = { TextButton(onClick = { onDelete(); showConfirm = false }) { Text("Delete") } },
+            dismissButton = { TextButton(onClick = { showConfirm = false }) { Text("Cancel") } },
+        )
+    }
+    Card(Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
+            Column(Modifier.weight(1f)) {
+                Text("#${record.nfcId} • ${record.plantName}", style = MaterialTheme.typography.titleSmall)
+                if (record.variety.isNotBlank()) Text(record.variety, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(record.latinName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(4.dp))
+                Text("${record.nfcType.label} • ${record.datum}", style = MaterialTheme.typography.bodySmall)
+                val syncLabel = when (record.syncStatus) { SyncStatus.SYNCED -> "✓ synced"; SyncStatus.PENDING -> "↑ pending"; SyncStatus.CONFLICT -> "! conflict" }
+                Text(syncLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            }
+            IconButton(onClick = { showConfirm = true }) {
+                Icon(Icons.Default.DeleteOutline, "Delete", tint = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+}

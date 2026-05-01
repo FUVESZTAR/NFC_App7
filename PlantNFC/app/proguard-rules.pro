@@ -1,0 +1,4 @@
+-keep class com.plantnfc.domain.model.** { *; }
+-keep class com.plantnfc.data.local.entities.** { *; }
+-dontwarn com.google.api.**
+-dontwarn com.google.http.**
