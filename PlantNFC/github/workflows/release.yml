@@ -14,7 +14,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: "PlantNFC 3"
+        working-directory: PlantNFC
 
     steps:
       - name: Checkout code
@@ -26,13 +26,8 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Download gradle-wrapper.jar
-        run: |
-          mkdir -p gradle/wrapper
-          curl -fsSL \
-            "https://raw.githubusercontent.com/gradle/gradle/v8.9.0/gradle/wrapper/gradle-wrapper.jar" \
-            -o gradle/wrapper/gradle-wrapper.jar
-          echo "Downloaded: $(ls -lh gradle/wrapper/gradle-wrapper.jar)"
+      - name: Create local.properties
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
@@ -43,7 +38,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: "PlantNFC 3/app/build/outputs/apk/debug/app-debug.apk"
+          files: PlantNFC/app/build/outputs/apk/debug/app-debug.apk
           name: "PlantNFC ${{ github.ref_name }}"
           body: "Debug APK for PlantNFC ${{ github.ref_name }}"
         env:
