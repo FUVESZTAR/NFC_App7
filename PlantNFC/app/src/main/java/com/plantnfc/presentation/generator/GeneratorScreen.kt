@@ -259,7 +259,8 @@ fun GeneratorScreen(
                         )
 
                         // Locked GPS packet
-                        if (!state.gpsPacketLocked.isNullOrBlank()) {
+                        val gpsPacketLocked = state.gpsPacketLocked
+                        if (!gpsPacketLocked.isNullOrBlank()) {
                             Text(
                                 "Compressed Packet",
                                 style = MaterialTheme.typography.labelSmall,
@@ -267,7 +268,7 @@ fun GeneratorScreen(
                             )
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = state.gpsPacketLocked,
+                                    text = gpsPacketLocked,
                                     style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                                     modifier = Modifier
                                         .weight(1f)
@@ -280,7 +281,7 @@ fun GeneratorScreen(
                                     color = MaterialTheme.colorScheme.secondaryContainer,
                                 ) {
                                     Text(
-                                        "${NfcTextCodec.sizeBytes(state.gpsPacketLocked)} B",
+                                        "${NfcTextCodec.sizeBytes(gpsPacketLocked)} B",
                                         Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                         style = MaterialTheme.typography.labelSmall,
                                     )
