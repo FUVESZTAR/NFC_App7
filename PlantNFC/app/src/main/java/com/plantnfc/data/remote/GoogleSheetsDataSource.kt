@@ -103,7 +103,9 @@ class GoogleSheetsDataSource @Inject constructor() {
                 currentUrl = location
                 return@repeat
             }
-            val text = (conn.inputStream ?: conn.errorStream).bufferedReader().readText()
+            // Use inputStream for 2xx, errorStream for 4xx/5xx
+            val stream = if (code in 200..299) conn.inputStream else (conn.errorStream ?: conn.inputStream)
+            val text = stream.bufferedReader().readText()
             conn.disconnect()
             return text
         }

@@ -56,9 +56,14 @@ class NfcRecordRepositoryImpl @Inject constructor(
     /** POST every PENDING record to the Google Sheet and mark it SYNCED on success. */
     override suspend fun syncToRemote(): Result<Unit> = runCatching {
         val pending = dao.getPending()
+        val failures = mutableListOf<String>()
         pending.forEach { entity ->
             sheetsDataSource.postNfcRecord(entity.toDomain())
                 .onSuccess { dao.updateSyncStatus(entity.id, SyncStatus.SYNCED.name) }
+                .onFailure { failures.add("NFC #${entity.nfcId}: ${it.message}") }
+        }
+        if (failures.isNotEmpty()) {
+            throw Exception("${failures.size} record(s) failed to sync: ${failures.first()}")
         }
     }
 
