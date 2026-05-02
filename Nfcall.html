@@ -1,0 +1,3181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NFC Generator &amp; Reader</title>
+  <link rel="icon" href="favicon.ico" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet"/>
+  <style>
+/* ── Design tokens ──────────────────────────────────────────── */
+:root {
+  --green:       #2f7d32;
+  --green-mid:   #388e3c;
+  --green-light: #4caf50;
+  --green-pale:  #e8f5e9;
+  --green-pale2: #c8e6c9;
+  --muted:       #546354;
+  --charcoal:    #172217;
+  --warm-gray:   #637263;
+  --bg:          #f5f8f3;
+  --card:        #ffffff;
+  --border:      rgba(47,125,50,.15);
+  --shadow:      0 4px 24px rgba(23,34,23,.08);
+  --shadow-lg:   0 12px 48px rgba(23,34,23,.14);
+  --radius:      18px;
+  --radius-sm:   10px;
+  --tr:          .22s cubic-bezier(.4,0,.2,1);
+}
+
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+html { scroll-behavior:smooth; }
+body {
+  font-family:'DM Sans',sans-serif;
+  background: radial-gradient(circle at top right,#dff0d8 0,var(--bg) 45%);
+  color: var(--charcoal);
+  line-height: 1.6;
+  min-height: 100vh;
+  cursor: url('leaf.cur') 0 0, auto;
+}
+
+/* ── Layout wrapper ─────────────────────────────────────────── */
+.page-wrapper {
+  width: min(620px, 96vw);
+  margin: 0 auto;
+  padding: 1rem 0 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* ── Page header ────────────────────────────────────────────── */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.page-header-left { display:flex; flex-direction:column; gap:2px; }
+.page-title {
+  font-family:'Playfair Display',serif;
+  font-size: clamp(1.4rem,4vw,1.9rem);
+  font-weight: 700;
+  color: var(--green);
+  line-height: 1.1;
+}
+.page-subtitle { font-size:.82rem; color:var(--muted); font-weight:300; }
+
+/* Language switcher */
+.lang-toggle {
+  display: flex;
+  background: var(--green-pale2);
+  border-radius: 20px;
+  padding: 3px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.lang-btn {
+  padding: 5px 14px;
+  border-radius: 16px;
+  font-size: .78rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--green-mid);
+  cursor: pointer;
+  transition: all var(--tr);
+  letter-spacing:.04em;
+  width: auto;
+}
+.lang-btn.active { background:var(--green); color:#fff; }
+.lang-btn:hover:not(.active) { background:rgba(47,125,50,.12); }
+
+/* ── Panel (collapsible card) ───────────────────────────────── */
+.panel {
+  background: var(--card);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  transition: box-shadow var(--tr);
+}
+.panel:hover { box-shadow: var(--shadow-lg); }
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--tr), background var(--tr);
+  gap: 10px;
+}
+.panel-header:hover { background: var(--green-pale); }
+.panel.open .panel-header { border-bottom-color: var(--border); }
+
+.panel-header-left { display:flex; align-items:center; gap:9px; flex:1; min-width:0; }
+.panel-icon { font-size:1.2rem; flex-shrink:0; }
+.panel-title {
+  font-family:'Playfair Display',serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--green);
+}
+.panel-subtitle {
+  font-size: .73rem;
+  color: var(--muted);
+  font-weight: 300;
+  margin-top: 1px;
+}
+
+/* Chevron */
+.panel-chevron {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--green-pale);
+  display: flex; align-items:center; justify-content:center;
+  flex-shrink: 0;
+  transition: transform .3s cubic-bezier(.4,0,.2,1), background var(--tr);
+}
+.panel-chevron svg {
+  width:12px; height:12px;
+  stroke: var(--green-mid); fill:none;
+  stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round;
+}
+.panel.open .panel-chevron { transform:rotate(180deg); }
+.panel-header:hover .panel-chevron { background: var(--green-pale2); }
+
+/* Collapsible body */
+.panel-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows .32s cubic-bezier(.4,0,.2,1);
+}
+.panel.open .panel-body { grid-template-rows: 1fr; }
+.panel-body-inner { overflow:hidden; }
+.panel-body-pad { padding: 18px 20px 20px; display:flex; flex-direction:column; gap:14px; }
+
+/* ── Toggle switch (on/off) ─────────────────────────────────── */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .8rem;
+  color: var(--muted);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.toggle-sw {
+  width: 52px; height: 28px;
+  background: #c8d8c8;
+  border-radius: 14px;
+  cursor: pointer;
+  border: none;
+  transition: background .3s;
+  flex-shrink: 0;
+  position: relative;
+}
+.toggle-sw.on { background: var(--green); }
+.toggle-sw::after {
+  content:'';
+  position:absolute;
+  top:3px; left:3px;
+  width:22px; height:22px;
+  border-radius:50%;
+  background:#fff;
+  transition:transform .3s;
+  box-shadow: 0 1px 5px rgba(0,0,0,.22);
+}
+.toggle-sw.on::after { transform:translateX(24px); }
+.toggle-label-on { color:var(--green); font-weight:600; }
+
+/* ── Searchable select ──────────────────────────────────────── */
+.searchable-select-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.searchable-select-wrap .select-search-input {
+  padding: 7px 10px 7px 30px;
+  font-size: .86rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23637263' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E") 9px center no-repeat;
+  color: var(--charcoal);
+  font-family: 'DM Sans', sans-serif;
+  outline: none;
+  width: 100%;
+  transition: border-color var(--tr);
+}
+.searchable-select-wrap .select-search-input:focus {
+  border-color: var(--green-mid);
+}
+.searchable-select-wrap .select-search-input::placeholder {
+  color: var(--warm-gray);
+}
+
+/* ── Form elements ──────────────────────────────────────────── */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.form-group label {
+  font-size: .79rem;
+  font-weight: 500;
+  color: var(--charcoal);
+}
+.form-group input,
+.form-group select,
+.form-group textarea {
+  padding: 9px 12px;
+  font-size: .92rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--green-pale);
+  color: var(--charcoal);
+  font-family: 'DM Sans',sans-serif;
+  outline: none;
+  transition: border-color var(--tr), background var(--tr);
+  width: 100%;
+}
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  border-color: var(--green-mid);
+  background: #fff;
+}
+.form-group input[readonly] {
+  background: var(--green-pale2);
+  color: var(--muted);
+  cursor: default;
+}
+.form-group textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* ── GPS data lines ─────────────────────────────────────────── */
+.data-line {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: .85rem;
+}
+.data-line:last-of-type { border-bottom: none; }
+.data-line span:first-child { color: var(--muted); font-weight:500; }
+.data-line span:last-child  { font-weight:600; color:var(--charcoal); }
+
+.packet-zone {
+  background: var(--green-pale);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  word-break: break-all;
+  font-family: monospace;
+  font-size: .82rem;
+  border: 1px solid var(--border);
+  color: var(--charcoal);
+}
+.meta-info {
+  font-size: .75rem;
+  color: var(--muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+.badge {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: .72rem;
+  background: var(--green-pale2);
+  color: var(--green);
+  font-weight: 600;
+}
+#gen-gpsStatus {
+  text-align: center;
+  font-weight: 600;
+  font-size: .84rem;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  transition: .3s;
+  background: var(--green-pale);
+  color: var(--muted);
+}
+.live-indicator {
+  color: var(--green-light);
+  animation: blink 1s infinite;
+  font-weight: 700;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+/* ── NFC preview ────────────────────────────────────────────── */
+.nfc-preview {
+  background: var(--green-pale);
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  word-break: break-all;
+  font-family: monospace;
+  font-size: .82rem;
+  border: 1px solid var(--border);
+  color: var(--charcoal);
+  min-height: 48px;
+}
+.preview-label {
+  font-size: .79rem;
+  font-weight: 500;
+  color: var(--charcoal);
+  display:flex; justify-content:space-between; align-items:center;
+}
+.size-tag {
+  font-size: .73rem;
+  font-weight: 400;
+  color: var(--muted);
+  background: var(--green-pale2);
+  padding: 1px 7px;
+  border-radius: 10px;
+}
+
+/* ── Buttons ────────────────────────────────────────────────── */
+.btn-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+.btn-grid.cols-3 { grid-template-columns:1fr 1fr 1fr; }
+.btn-grid.cols-1 { grid-template-columns:1fr; }
+
+button.btn-primary,
+button.btn-secondary,
+button.btn-link,
+button.btn-back {
+  padding: .75rem 1rem;
+  font-size: .92rem;
+  font-family:'DM Sans',sans-serif;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-weight: 500;
+  transition: transform .15s, background var(--tr);
+  width: 100%;
+}
+button.btn-primary {
+  background: var(--green);
+  color: #fff;
+}
+button.btn-primary:hover:not(:disabled) { background:var(--green-mid); transform:translateY(-1px); }
+button.btn-secondary {
+  background: var(--green-pale2);
+  color: var(--green);
+  border: 1px solid var(--border);
+}
+button.btn-secondary:hover:not(:disabled) { background:var(--green-pale); }
+button.btn-link {
+  background: none;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+button.btn-link:hover:not(:disabled) { background:var(--green-pale); }
+button.btn-back {
+  background: none;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  font-size: .85rem;
+}
+button.btn-back:hover { background:var(--green-pale); }
+button:disabled { opacity:.55; cursor:not-allowed; }
+
+/* GPS start/stop buttons */
+#gen-gpsStartBtn, #gen-gpsStopBtn {
+  padding: .7rem 1rem;
+  font-size: .9rem;
+  font-family:'DM Sans',sans-serif;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-weight: 500;
+  width: 100%;
+  transition: transform .15s, background var(--tr);
+}
+#gen-gpsStartBtn { background:var(--green); color:#fff; }
+#gen-gpsStartBtn:hover { background:var(--green-mid); }
+#gen-gpsStopBtn { background:#c62828; color:#fff; }
+#gen-gpsStopBtn:hover { background:#b71c1c; }
+
+/* ── Error / status message ─────────────────────────────────── */
+.status-msg {
+  font-size: .83rem;
+  min-height: 1.2em;
+  padding: 4px 0;
+  text-align: center;
+  font-weight: 500;
+}
+.status-msg.error   { color:#c62828; }
+.status-msg.success { color:var(--green); }
+.status-msg.info    { color:#1565c0; }
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media(max-width:480px) {
+  .panel-header { padding:14px 15px; }
+  .panel-body-pad { padding:14px 15px 16px; }
+  .btn-grid { grid-template-columns:1fr; }
+  .btn-grid.cols-3 { grid-template-columns:1fr; }
+}
+
+/* ── Tab styles ─────────────────────────────────────────────── */
+.tab-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 0.5rem;
+}
+.tab-btn {
+  padding: 8px 20px;
+  border-radius: var(--radius-sm);
+  font-size: .9rem;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 600;
+  border: none;
+  background: var(--green-pale2);
+  color: var(--green);
+  cursor: pointer;
+  transition: background var(--tr);
+  width: auto;
+}
+.tab-btn.active {
+  background: var(--green);
+  color: #fff;
+}
+.tab-section { display: none; }
+.tab-section.active { display: contents; }
+  </style>
+</head>
+<body>
+  <main class="page-wrapper">
+
+    <!-- Header -->
+    <div class="page-header">
+      <div class="page-header-left">
+        <div class="page-title">🌿 NFC</div>
+        <div class="page-subtitle" id="page-subtitle-dyn">NFC Generator &amp; Reader</div>
+      </div>
+      <div class="lang-toggle">
+        <button class="lang-btn" data-lang="en" type="button">EN</button>
+        <button class="lang-btn" data-lang="hu" type="button">HU</button>
+      </div>
+    </div>
+
+    <!-- Tab switcher -->
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="gen" onclick="switchTab('gen')" type="button">🌱 Generator</button>
+      <button class="tab-btn" data-tab="read" onclick="switchTab('read')" type="button">📖 Reader</button>
+    </div>
+
+    <!-- Generator section -->
+    <div id="tab-gen" class="tab-section active">
+
+    <!-- ── Panel 1: Selection ──────────────────────────────── -->
+    <div class="panel open" id="gen-panel-selection">
+      <div class="panel-header" onclick="togglePanel('gen-panel-selection')">
+        <div class="panel-header-left">
+          <span class="panel-icon">🌱</span>
+          <div>
+            <div class="panel-title" data-i18n="nfcgen.main_card_title">Selection</div>
+            <div class="panel-subtitle" data-i18n="nfcgen.main_card_sub">Choose a plant and variety.</div>
+          </div>
+        </div>
+        <div class="panel-chevron"><svg viewBox="0 0 12 12"><polyline points="2,4 6,8 10,4"/></svg></div>
+      </div>
+      <div class="panel-body"><div class="panel-body-inner"><div class="panel-body-pad">
+        <div class="form-group">
+          <label for="gen-plant-selector" data-i18n="nfcgen.lbl_plant">Plant Name</label>
+          <div class="searchable-select-wrap">
+            <input type="text" id="gen-plant-selector-search" class="select-search-input"
+                   data-i18n-placeholder="nfcgen.ph_search_plant" placeholder="Search plants…"
+                   autocomplete="off" />
+            <select id="gen-plant-selector" aria-label="Select plant">
+              <option value="" data-i18n="nfcgen.opt_loading">Loading plants…</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="gen-name-variety" data-i18n="nfcgen.lbl_variety">Variety</label>
+          <div class="searchable-select-wrap">
+            <input type="text" id="gen-name-variety-search" class="select-search-input"
+                   data-i18n-placeholder="nfcgen.ph_search_variety" placeholder="Search varieties…"
+                   autocomplete="off" />
+            <select id="gen-name-variety">
+              <option value="" data-i18n="nfcgen.opt_variety">Select a variety…</option>
+            </select>
+          </div>
+          <input type="text" id="gen-name-variety-custom"
+                 data-i18n-placeholder="nfcgen.ph_custom_variety"
+                 placeholder="Enter custom variety"
+                 style="display:none; margin-top:6px;" />
+        </div>
+      </div></div></div>
+    </div>
+
+    <!-- ── Panel 2: NFC Data ───────────────────────────────── -->
+    <div class="panel open" id="gen-panel-data">
+      <div class="panel-header" onclick="togglePanel('gen-panel-data')">
+        <div class="panel-header-left">
+          <span class="panel-icon">📋</span>
+          <div>
+            <div class="panel-title" data-i18n="nfcgen.data_card_title">Data</div>
+            <div class="panel-subtitle" data-i18n="nfcgen.data_card_sub">Data stored in NFC</div>
+          </div>
+        </div>
+        <div class="panel-chevron"><svg viewBox="0 0 12 12"><polyline points="2,4 6,8 10,4"/></svg></div>
+      </div>
+      <div class="panel-body"><div class="panel-body-inner"><div class="panel-body-pad">
+        <div class="form-group">
+          <label for="gen-plantId" data-i18n="nfcgen.plantId">Plant ID</label>
+          <input type="text" id="gen-plantId" readonly />
+        </div>
+        <div class="form-group">
+          <label for="gen-nfcId" data-i18n="nfcgen.nfcId">NFC ID</label>
+          <input type="number" id="gen-nfcId" />
+        </div>
+        <div class="form-group">
+          <label for="gen-latin-name" data-i18n="nfcgen.lbl_latin">Latin Name</label>
+          <input type="text" id="gen-latin-name" />
+        </div>
+        <div class="form-group">
+          <label for="gen-datum" data-i18n="nfcgen.lbl_datum">Date</label>
+          <input type="text" id="gen-datum" placeholder="e.g., 2026-03-12" />
+        </div>
+        <div class="form-group">
+          <label for="gen-nfcTyp" data-i18n="nfcgen.lbl_nfcTyp">NFC Type</label>
+          <select id="gen-nfcTyp">
+            <option value="n" selected data-i18n="nfcgen.opt_n">n – plant</option>
+            <option value="o" data-i18n="nfcgen.opt_o">o – graft</option>
+            <option value="m" data-i18n="nfcgen.opt_m">m – seed</option>
+          </select>
+        </div>
+      </div></div></div>
+    </div>
+
+    <!-- ── Panel 3: GPS ────────────────────────────────────── -->
+    <div class="panel" id="gen-panel-gps">
+      <div class="panel-header" onclick="togglePanelExcl(event,'gen-panel-gps')">
+        <div class="panel-header-left">
+          <span class="panel-icon">📡</span>
+          <div>
+            <div class="panel-title" data-i18n="nfcgen.gps_card_title">GPS Data</div>
+            <div class="panel-subtitle" data-i18n="nfcgen.gps_card_sub">Record position in NFC</div>
+          </div>
+        </div>
+        <!-- Toggle: always visible, does NOT collapse the panel -->
+        <div class="toggle-row" onclick="event.stopPropagation()">
+          <span data-i18n="nfcgen.mode_off">Off</span>
+          <button class="toggle-sw" id="gen-gps_card_toggle" aria-label="GPS on/off"></button>
+          <span class="toggle-label-on" data-i18n="nfcgen.mode_on">On</span>
+        </div>
+        <div class="panel-chevron"><svg viewBox="0 0 12 12"><polyline points="2,4 6,8 10,4"/></svg></div>
+      </div>
+      <div class="panel-body"><div class="panel-body-inner"><div class="panel-body-pad">
+        <div id="gen-gps_card_body" style="display:none">
+          <div style="display:flex;gap:9px;flex-direction:column">
+            <button id="gen-gpsStartBtn" type="button" data-i18n="nfcgen.btn_gps_start">Start Live Tracking</button>
+            <button id="gen-gpsStopBtn" type="button" style="display:none" data-i18n="nfcgen.btn_gps_stop">Stop &amp; Lock Data</button>
+          </div>
+          <div>
+            <div class="data-line"><span data-i18n="nfcgen.lbl_lat">Latitude:</span><span id="gen-gpsDispLat">–</span></div>
+            <div class="data-line"><span data-i18n="nfcgen.lbl_lon">Longitude:</span><span id="gen-gpsDispLon">–</span></div>
+            <div class="data-line"><span data-i18n="nfcgen.lbl_alt">Altitude:</span><span id="gen-gpsDispAlt">–</span></div>
+            <div class="data-line"><span data-i18n="nfcgen.lbl_acc">Accuracy:</span><span id="gen-gpsDispAcc">–</span></div>
+          </div>
+          <div class="meta-info">
+            <span id="gen-updateTimer" data-i18n="nfcgen.gps_standby" data-i18n-live>Status: Standing by</span>
+            <span id="gen-liveDot" style="display:none" class="live-indicator">● LIVE</span>
+          </div>
+          <div class="meta-info">
+            <span data-i18n="nfcgen.lbl_packet">Compressed Packet</span>
+            <span class="badge" id="gen-posPacketSize">0 B</span>
+          </div>
+          <div class="packet-zone" id="gen-posPacketOut" data-i18n="nfcgen.no_data_locked" data-i18n-live>No data locked…</div>
+          <div id="gen-gpsStatus" data-i18n="nfcgen.gps_ready" data-i18n-live>Ready.</div>
+        </div>
+      </div></div></div>
+    </div>
+
+    <!-- ── Panel 4: Other info ─────────────────────────────── -->
+    <div class="panel" id="gen-panel-other">
+      <div class="panel-header" onclick="togglePanelExcl(event,'gen-panel-other')">
+        <div class="panel-header-left">
+          <span class="panel-icon">📝</span>
+          <div>
+            <div class="panel-title" data-i18n="nfcgen.oth_card_title">Other Info</div>
+            <div class="panel-subtitle" data-i18n="nfcgen.oth_card_sub">Optional extra notes</div>
+          </div>
+        </div>
+        <!-- Toggle: always visible -->
+        <div class="toggle-row" onclick="event.stopPropagation()">
+          <span data-i18n="nfcgen.mode_off">Off</span>
+          <button class="toggle-sw" id="gen-oth_card_toggle" aria-label="Other info on/off"></button>
+          <span class="toggle-label-on" data-i18n="nfcgen.mode_on">On</span>
+        </div>
+        <div class="panel-chevron"><svg viewBox="0 0 12 12"><polyline points="2,4 6,8 10,4"/></svg></div>
+      </div>
+      <div class="panel-body"><div class="panel-body-inner"><div class="panel-body-pad">
+        <div class="form-group" id="gen-oth_card_body" style="display:none">
+          <label for="gen-egyeb" data-i18n="nfcgen.lbl_other_notes">Notes</label>
+          <textarea id="gen-egyeb" data-i18n-placeholder="nfcgen.ph_other_notes" placeholder="Additional information"></textarea>
+        </div>
+      </div></div></div>
+    </div>
+
+    <!-- ── Panel 5: NFC Preview ────────────────────────────── -->
+    <div class="panel open" id="gen-panel-preview">
+      <div class="panel-header" onclick="togglePanel('gen-panel-preview')">
+        <div class="panel-header-left">
+          <span class="panel-icon">🔍</span>
+          <div>
+            <div class="panel-title" data-i18n="nfcgen.preview_title">NFC Preview</div>
+            <div class="panel-subtitle" data-i18n="nfcgen.preview_sub">Generated data and link</div>
+          </div>
+        </div>
+        <div class="panel-chevron"><svg viewBox="0 0 12 12"><polyline points="2,4 6,8 10,4"/></svg></div>
+      </div>
+      <div class="panel-body"><div class="panel-body-inner"><div class="panel-body-pad">
+        <div class="form-group">
+          <div class="preview-label">
+            <span data-i18n="nfcgen.lbl_nfc_preview">NFC Data</span>
+            <span class="size-tag" id="gen-nfc-size">0 B</span>
+          </div>
+          <div class="nfc-preview" id="gen-nfc-preview" data-i18n="nfcgen.ph_nfc_preview" data-i18n-live>NFC data will appear here…</div>
+        </div>
+        <div class="form-group">
+          <div class="preview-label">
+            <span data-i18n="nfcgen.lbl_link_preview">Link</span>
+            <span class="size-tag" id="gen-link-size">0 B</span>
+          </div>
+          <div class="nfc-preview" id="gen-link-preview" data-i18n="nfcgen.ph_link_preview" data-i18n-live>Link will appear here…</div>
+        </div>
+        <div style="text-align:right;font-size:.78rem;color:var(--muted)">
+          <span data-i18n="nfcgen.lbl_total_size">Total:</span> <span id="gen-total-size">0 B</span>
+          <div class="form-group">
+              <div class="preview-label">
+                 <span data-i18n="nfcgen.serialNr">NFC HW ID</span>
+              </div>
+              <input type="text" id="gen-serialNr" />
+            </div>
+        </div>
+      </div></div></div>
+    </div>
+
+    <!-- ── Panel 6: Actions ────────────────────────────────── -->
+    <div class="panel open" id="gen-panel-actions">
+      <div class="panel-header" onclick="togglePanel('gen-panel-actions')">
+        <div class="panel-header-left">
+          <span class="panel-icon">⚡</span>
+          <div>
+            <div class="panel-title" data-i18n="nfcgen.actions_title">Actions</div>
+            <div class="panel-subtitle" data-i18n="nfcgen.actions_sub">Write, save, copy</div>
+          </div>
+        </div>
+        <div class="panel-chevron"><svg viewBox="0 0 12 12"><polyline points="2,4 6,8 10,4"/></svg></div>
+      </div>
+      <div class="panel-body"><div class="panel-body-inner"><div class="panel-body-pad">
+           <!-- Error / status message -->
+         <p class="status-msg" id="gen-error-message"></p>
+        <div class="btn-grid cols-3">
+          <button id="gen-generate-nfc"   class="btn-primary"   type="button" data-i18n="nfcgen.btn_generate">Generate NFC</button>
+          <button id="gen-nfc-write-button" class="btn-primary" type="button" data-i18n="nfcgen.btn_write">Write NFC</button>
+          <button id="gen-save-nfc"       class="btn-primary"   type="button" data-i18n="nfcgen.btn_save">Save NFC</button>
+        </div>
+        <div class="btn-grid">
+          <button id="gen-copy-nfc"  class="btn-secondary" type="button" data-i18n="nfcgen.btn_copy_nfc">Copy NFC</button>
+          <button id="gen-copy-link" class="btn-secondary" type="button" data-i18n="nfcgen.btn_copy_link">Copy Link</button>
+          <button id="gen-qr-button" class="btn-secondary" type="button" data-i18n="nfcgen.btn_qr">NFC QR Code</button>
+        </div>
+        <div class="btn-grid">
+          <button id="gen-read-nfc" class="btn-link" type="button" data-i18n="nfcgen.btn_nfcread">NFC Reader</button>
+          <button id="gen-list-nfc" class="btn-link" type="button" data-i18n="nfcgen.btn_nfclist">NFC List</button>
+          <button id="gen-back-button" class="btn-back"   type="button" data-i18n="nfcgen.btn_back">← Back</button>
+        </div>
+      </div></div></div>
+    </div>
+
+    </div><!-- end tab-gen -->
+
+    <!-- Reader section -->
+    <div id="tab-read" class="tab-section">
+
+    <!-- ── Panel Actions ──────────────────────────────────── -->
+    <div class="panel open" id="read-panel-actions">
+      <div class="panel-header" onclick="togglePanel('read-panel-actions')">
+        <div class="panel-header-left">
+          <span class="panel-icon">⚡</span>
+          <div>
+            <div class="panel-title" data-i18n="nfcread.actions_title">Actions</div>
+            <div class="panel-subtitle" data-i18n="nfcread.actions_sub">Read, copy</div>
+          </div>
+        </div>
+        <div class="panel-chevron"><svg viewBox="0 0 12 12"><polyline points="2,4 6,8 10,4"/></svg></div>
+      </div>
+      <div class="panel-body"><div class="panel-body-inner"><div class="panel-body-pad">
+           <!-- Error / status message -->
+         <p class="status-msg" id="read-error-message"></p>
+        <div class="btn-grid cols-3">
+          <button id="read-read-nfc"   class="btn-primary"   type="button" data-i18n="nfcread.btn_read">Read NFC</button>
+          <button id="read-clear-button"   class="btn-primary"   type="button" data-i18n="nfcread.btn_clear">Clear Fields</button>
+          <button id="read-open-link-button" class="btn-primary" type="button" data-i18n="nfcread.btn_open">Open Link</button>
+        </div>
+        <div class="btn-grid">
+          <button id="read-copy-nfc"  class="btn-secondary" type="button" data-i18n="nfcread.btn_copy_nfc">Copy NFC</button>
+          <button id="read-copy-link" class="btn-secondary" type="button" data-i18n="nfcread.btn_copy_link">Copy Link</button>
+        </div>
+        <div class="btn-grid">
+          <button id="read-gen-nfc" class="btn-link" type="button" data-i18n="nfcread.btn_nfcgen">NFC Generator</button>
+          <button id="read-list-nfc" class="btn-link" type="button" data-i18n="nfcread.btn_nfclist">NFC List</button>
+          <button id="read-back-button" class="btn-back" type="button" data-i18n="nfcread.btn_back">← Back</button>
+        </div>
+      </div></div></div>
+    </div>
+
+    <!-- ── Panel Preview ──────────────────────────────────── -->
+    <div class="panel open" id="read-panel-preview">
+      <div class="panel-header" onclick="togglePanel('read-panel-preview')">
+        <div class="panel-header-left">
+          <span class="panel-icon">🔍</span>
+          <div>
+            <div class="panel-title" data-i18n="nfcread.preview_title">NFC Preview</div>
+            <div class="panel-subtitle" data-i18n="nfcread.preview_sub">Read data and link</div>
+          </div>
+        </div>
+        <div class="panel-chevron"><svg viewBox="0 0 12 12"><polyline points="2,4 6,8 10,4"/></svg></div>
+      </div>
+      <div class="panel-body"><div class="panel-body-inner"><div class="panel-body-pad">
+        <div class="form-group">
+          <div class="preview-label">
+            <span data-i18n="nfcread.lbl_nfc_preview">NFC Data</span>
+            <span class="size-tag" id="read-nfc-size">0 B</span>
+          </div>
+          <div class="nfc-preview" id="read-nfc-preview" data-i18n="nfcread.ph_nfc_preview" data-i18n-live>NFC data will appear here…</div>
+        </div>
+        <div class="form-group">
+          <div class="preview-label">
+            <span data-i18n="nfcread.lbl_link_preview">Link</span>
+            <span class="size-tag" id="read-link-size">0 B</span>
+          </div>
+          <div class="nfc-preview" id="read-link-preview" data-i18n="nfcread.ph_link_preview" data-i18n-live>Link will appear here…</div>
+        </div>
+        <div style="text-align:right;font-size:.78rem;color:var(--muted)">:(
+          <span data-i18n="nfcread.lbl_total_size">Total:</span> <span id="read-total-size">0 B</span>
+          <div class="form-group">
+              <div class="preview-label">
+                 <span data-i18n="nfcread.serialNr">NFC Serial number</span>
+              </div>
+              <input type="text" id="read-serialNr" />
+            </div>
+        </div>
+      </div></div></div>
+    </div>
+
+    <!-- ── Panel Selection ────────────────────────────────── -->
+    <div class="panel open" id="read-panel-selection">
+      <div class="panel-header" onclick="togglePanel('read-panel-selection')">
+        <div class="panel-header-left">
+          <span class="panel-icon">🌱</span>
+          <div>
+            <div class="panel-title" data-i18n="nfcread.main_card_title">Selection</div>
+            <div class="panel-subtitle" data-i18n="nfcread.main_card_sub">Choose a plant and variety.</div>
+          </div>
+        </div>
+        <div class="panel-chevron"><svg viewBox="0 0 12 12"><polyline points="2,4 6,8 10,4"/></svg></div>
+      </div>
+      <div class="panel-body"><div class="panel-body-inner"><div class="panel-body-pad">
+        <div class="form-group">
+          <label for="read-name-plant" data-i18n="nfcread.lbl_plant">Plant Name</label>
+          <input type="text" id="read-name-plant" readonly />
+        </div>
+        <div class="form-group">
+          <label for="read-name-variety" data-i18n="nfcread.lbl_variety">Variety</label>
+          <input type="text" id="read-name-variety" readonly />
+        </div>
+      </div></div></div>
+    </div>
+
+    <!-- ── Panel Data ─────────────────────────────────────── -->
+    <div class="panel open" id="read-panel-data">
+      <div class="panel-header" onclick="togglePanel('read-panel-data')">
+        <div class="panel-header-left">
+          <span class="panel-icon">📋</span>
+          <div>
+            <div class="panel-title" data-i18n="nfcread.data_card_title">Data</div>
+            <div class="panel-subtitle" data-i18n="nfcread.data_card_sub">Data stored in NFC</div>
+          </div>
+        </div>
+        <div class="panel-chevron"><svg viewBox="0 0 12 12"><polyline points="2,4 6,8 10,4"/></svg></div>
+      </div>
+      <div class="panel-body"><div class="panel-body-inner"><div class="panel-body-pad">
+        <div class="form-group">
+          <label for="read-plantId" data-i18n="nfcread.plantId">Plant ID</label>
+          <input type="text" id="read-plantId" readonly />
+        </div>
+        <div class="form-group">
+          <label for="read-nfcId" data-i18n="nfcread.nfcId">NFC ID</label>
+          <input type="number" id="read-nfcId" />
+        </div>
+        <div class="form-group">
+          <label for="read-latin-name" data-i18n="nfcread.lbl_latin">Latin Name</label>
+          <input type="text" id="read-latin-name" />
+        </div>
+        <div class="form-group">
+          <label for="read-datum" data-i18n="nfcread.lbl_datum">Date</label>
+          <input type="text" id="read-datum" placeholder="" />
+        </div>
+        <div class="form-group">
+          <label for="read-nfcTyp" data-i18n="nfcread.lbl_nfcTyp">NFC Type</label>
+           <input type="text" id="read-nfcTyp" />
+        </div>
+      </div></div></div>
+    </div>
+
+    <!-- ── Panel GPS ──────────────────────────────────────── -->
+    <div class="panel open" id="read-panel-gps">
+      <div class="panel-header" onclick="togglePanelExcl(event,'read-panel-gps')">
+        <div class="panel-header-left">
+          <span class="panel-icon">📡</span>
+          <div>
+            <div class="panel-title" data-i18n="nfcread.gps_card_title">GPS Data</div>
+            <div class="panel-subtitle" data-i18n="nfcread.gps_card_sub">Record position in NFC</div>
+          </div>
+        </div>
+        <div class="panel-chevron"><svg viewBox="0 0 12 12"><polyline points="2,4 6,8 10,4"/></svg></div>
+      </div>
+      <div class="panel-body"><div class="panel-body-inner"><div class="panel-body-pad">
+        <div id="read-gps_card_body">
+          <div>
+            <div class="data-line"><span data-i18n="nfcread.lbl_lat">Latitude:</span><span id="read-gpsDispLat">–</span></div>
+            <div class="data-line"><span data-i18n="nfcread.lbl_lon">Longitude:</span><span id="read-gpsDispLon">–</span></div>
+            <div class="data-line"><span data-i18n="nfcread.lbl_alt">Altitude:</span><span id="read-gpsDispAlt">–</span></div>
+            <div class="data-line"><span data-i18n="nfcread.lbl_acc">Accuracy:</span><span id="read-gpsDispAcc">–</span></div>
+          </div>
+          <div class="meta-info">
+            <span data-i18n="nfcread.lbl_packet">Compressed Packet</span>
+            <span class="badge" id="read-posPacketSize">0 B</span>
+            <div style="display:none" id="read-posPacketOut" data-i18n="nfcread.no_data_locked" data-i18n-live>No data locked…</div>
+          </div>
+        </div>
+      </div></div></div>
+    </div>
+
+    <!-- ── Panel Other ────────────────────────────────────── -->
+    <div class="panel open" id="read-panel-other">
+      <div class="panel-header" onclick="togglePanelExcl(event,'read-panel-other')">
+        <div class="panel-header-left">
+          <span class="panel-icon">📝</span>
+          <div>
+            <div class="panel-title" data-i18n="nfcread.oth_card_title">Other Info</div>
+            <div class="panel-subtitle" data-i18n="nfcread.oth_card_sub">Optional extra notes</div>
+          </div>
+        </div>
+        <div class="panel-chevron"><svg viewBox="0 0 12 12"><polyline points="2,4 6,8 10,4"/></svg></div>
+      </div>
+      <div class="panel-body"><div class="panel-body-inner"><div class="panel-body-pad">
+        <div class="form-group" id="read-oth_card_body">
+          <label for="read-egyeb" data-i18n="nfcread.lbl_other_notes">Notes</label>
+          <textarea id="read-egyeb"></textarea>
+        </div>
+      </div></div></div>
+    </div>
+
+    </div><!-- end tab-read -->
+
+  </main>
+
+  <!-- Script 1: Panel/Tab helpers -->
+  <script>
+  function togglePanel(id) {
+    const panel = document.getElementById(id);
+    if (panel) panel.classList.toggle('open');
+  }
+  function togglePanelExcl(event, id) {
+    togglePanel(id);
+  }
+  function switchTab(tab) {
+    document.querySelectorAll('.tab-section').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + tab).classList.add('active');
+    document.querySelector('.tab-btn[data-tab="' + tab + '"]').classList.add('active');
+  }
+  </script>
+
+  <!-- Script 2: i18n + lang (combined, no imports/exports) -->
+  <script>
+/**
+ * Translation strings for English and Hungarian.
+ * To check/correct translations, look at each key and compare the 'en' and 'hu' values side by side.
+ */
+const TRANSLATIONS = {
+  en: {
+    // ── Home Page ─────────────────────────────────────────────────────────────
+    "home.title": "Homepage",
+    "home.subtitle": "My webpages",
+    "home.card.plantpage.title": "Plant Page",
+    "home.card.plantpage.desc": "Browse and search plants, open detailed plant views and manage NFC tags.",
+    "home.card.nfcgenerator.title": "NFC Generator",
+    "home.card.nfcgenerator.desc": "Create and write NFC tags linked to plant records in your garden.",
+    "home.card.nfcread.title": "NFC Reader",
+    "home.card.nfcread.desc": "Read NFC tags linked to plant records in your garden.",
+    "home.card.nfclist.title": "NFC List",
+    "home.card.nfclist.desc": "List of created NFC tags.",
+    "home.card.plantlist.title": "Plant List",
+    "home.card.plantlist.desc": "View the full list of plants with filtering by family, genus and variety.",
+    "home.card.seedbank.title": "Seedbank",
+    "home.card.seedbank.desc": "View the full list of seeds with filtering by family, genus, name and variety.",
+    "home.card.position.title": "GPS Position",
+    "home.card.position.desc": "Record and view the GPS positions of plants in your garden.",
+    "home.card.shadowmap.title": "Shadow Map",
+    "home.card.shadowmap.desc": "Visualise sun and shadow patterns across your garden throughout the year.",
+    "home.card.sourdough.title": "Sourdough",
+    "home.card.sourdough.desc": "Manage your sourdough starter schedule and baking timelines.",
+    "home.card.qigong.title": "Qi Gong",
+    "home.card.qigong.desc": "Qi Gong routine guide with guided sessions.",
+
+    // ── Page titles ──────────────────────────────────────────────────────────
+    "page.title.plantpage": "Plant Page",
+    "page.title.list": "Plant List",
+    "page.title.detail": "Plant Sheet",
+    "page.title.nfcList": "NFC List",
+
+    // ── Plantpage ─────────────────────────────────────────────────────────────
+    "plantpage.heading": "Plant Page",
+    "plantpage.subtitle": "Choose a plant and open its detailed view.",
+    "plantpage.label.plantName": "Plant name",
+    "plantpage.label.variety": "Variety",
+    "plantpage.btn.openView": "Open Plant View",
+    "plantpage.btn.back": "\u2190 Back",
+    "plantpage.btn.nfcGenerator": "NFC Generator",
+    "plantpage.btn.nfcRead": "NFC Reader",
+    "plantpage.panel.selection.title": "Selection",
+    "plantpage.panel.selection.subtitle": "Choose a plant and variety.",
+    "plantpage.subtitle.lists": "Lists",
+    "plantpage.label.family": "Family",
+    "plantpage.label.genus": "Genus",
+    "plantpage.label.latinName": "Latin name",
+    "plantpage.btn.openList": "Open Plant List",
+    "plantpage.subtitle.pages": "Pages",
+    "plantpage.btn.nfcList": "NFC List",
+    "plantpage.btn.shadowMap": "Shadow Map",
+    "plantpage.placeholder.selectPlant": "Select a plant",
+    "plantpage.placeholder.loadingPlants": "Loading plants\u2026",
+    "plantpage.placeholder.loadingVarieties": "Loading varieties\u2026",
+    "plantpage.placeholder.allFamilies": "All families",
+    "plantpage.placeholder.allGenera": "All genera",
+    "plantpage.placeholder.allLatinNames": "All latin names",
+    "plantpage.placeholder.searchPlants": "Search plants\u2026",
+    "plantpage.placeholder.searchVarieties": "Search varieties\u2026",
+    "plantpage.error.loadFailed": "Failed to load plant data",
+    "plantpage.error.option": "(error)",
+
+    // ── Plant List Page ───────────────────────────────────────────────────────
+    "list.title": "Plant List",
+    "list.btn.back": "\u2190 Back",
+    "list.allPlants": "All plants",
+    "list.filter.family": "Family",
+    "list.filter.genus": "Genus",
+    "list.filter.latin": "Latin Name",
+    "list.filter.nameEn": "Name (EN)",
+    "list.filter.nameHu": "Name (HU)",
+    "list.filter.variety": "Variety",
+    "list.filter.allGenera": "All genera",
+    "list.filter.allFamilies": "All families",
+    "list.filter.allLatinNames": "All latin names",
+    "list.filter.allNameEn": "All names (EN)",
+    "list.filter.allNameHu": "All names (HU)",
+    "list.filter.allVarieties": "All varieties",
+    "list.filter.search": "Search\u2026",
+    "list.table.plantId": "Plant ID",
+    "list.table.latinName": "Latin Name",
+    "list.table.variety": "Variety",
+    "list.table.nameEN": "Name (EN)",
+    "list.table.nameHU": "Name (HU)",
+    "list.loading": "Loading\u2026",
+    "list.error.loadFailed": "Failed to load plant data",
+    "list.error.loadData": "Error loading data",
+    "list.empty": "No plants found",
+
+    // ── Seedbank Page ─────────────────────────────────────────────────────────
+    "seedbank.title": "Seedbank",
+    "seedbank.table.seedav": "Seed availability",
+    "seedbank.table.seedbank": "Seedbank",
+    "seedbank.table.year": "Year",
+    "seedbank.filter.allSeedbanks": "All seedbanks",
+    "seedbank.filter.allYears": "All years",
+
+    // ── NFC List Page ─────────────────────────────────────────────────────────
+    "nfc.title": "NFC List",
+    "nfc.btn.back": "\u2190 Back",
+    "nfc.allRecords": "All NFC records",
+    "nfc.table.id": "NFC ID",
+    "nfc.table.nfcText": "NFC Text",
+    "nfc.table.link": "Link",
+    "nfc.table.plantId": "Plant ID",
+    "nfc.table.created": "Created",
+    "nfc.table.datum": "Datum",
+    "nfc.table.location": "Location",
+    "nfc.table.nfcStatus": "NFC Status",
+    "nfc.table.nfcType": "NFC Type",
+    "nfc.table.nfcSerial": "NFC Serial Nr.",
+    "nfc.table.nfcPosition": "GPS Position",
+    "nfc.table.other": "Other",
+    "nfc.filter.allNfcIds": "All NFC IDs",
+    "nfc.filter.allPlantIds": "All plant IDs",
+    "nfc.filter.allFamilies": "All families",
+    "nfc.filter.allGenera": "All genera",
+    "nfc.filter.allLatinNames": "All latin names",
+    "nfc.filter.allVarieties": "All varieties",
+    "nfc.filter.search": "Search\u2026",
+    "nfc.loading": "Loading\u2026",
+    "nfc.error.loadFailed": "Failed to load NFC data",
+    "nfc.error.loadData": "Error loading data",
+    "nfc.empty": "No NFC records found",
+
+    // ── Plant Detail Page (P.html) ────────────────────────────────────────────
+    "detail.btn.back": "\u2190 Back",
+    "detail.section.nfcLink": "NFC Link",
+    "detail.label.names": "Names:",
+    "detail.label.datastatus": "Database not yet filled!",
+    "detail.label.edibilityTitle": "Edibility:",
+    "detail.label.medicinalTitle": "Medicinal:",
+    "detail.legend.edibleRaw": "Green = Edible Raw",
+    "detail.legend.ediblePrepared": "Yellow = Edible only prepared",
+    "detail.legend.toxic": "Red = Toxic",
+    "detail.legend.inedible": "Black = Inedible",
+    "detail.label.uses": "Uses:",
+    "detail.label.preparationToEdibility": "Preparation to Edibility:",
+    "detail.label.medicinalParts": "Medicinal parts:",
+    "detail.label.medicinalUse": "Medicinal use:",
+    "detail.section.calendar": "Calendar",
+    "detail.section.planning": "PLANNING",
+    "detail.section.varieties": "List of Varieties",
+    "detail.label.plantFlowerColor": "Plant flower color",
+    "detail.label.plantType": "Plant Type:",
+    "detail.label.hardinesszoneusda": "Hardiness:",
+    "detail.label.edibleParts": "Edible Parts:",
+    "detail.label.onlypreparedediblepartsall": "Only prepared edible parts:",
+    "detail.label.toxicParts": "Toxic Parts:",
+    "detail.label.daysToHarvest": "Days to Harvest:",
+    "detail.label.daysToMaturity": "Days to Maturity:",
+    "detail.label.daystogermination": "Days to Germination:",
+    "detail.label.seedDepth": "Planting seed depth (mm):",
+    "detail.label.seedSoilTemp": "Planting seed soil temperature (\u00b0C):",
+    "detail.label.plantDistance": "Planting distance (mm):",
+    "detail.label.plantDescription": "Plant description:",
+    "detail.label.plantHeightMax": "Plant height max (mm):",
+    "detail.label.plantHeightAvg": "Plant height average (mm):",
+    "detail.label.plantWidthAvg": "Plant width average (mm):",
+    "detail.label.plantSpaceFilling": "Plant space filling (mm):",
+    "detail.label.rootType": "Plant root type:",
+    "detail.label.lifecycle": "Plant growing lifecycle:",
+    "detail.label.growingHabit": "Plant growing habit:",
+    "detail.label.seedGerminationTime": "Seed germination time (days):",
+    "detail.label.seedSurvivalTime": "Seed survival time (months):",
+    "detail.label.dangersToHumans": "Plant dangers to humans:",
+    "detail.noPlantSelected": "No plant selected",
+    "detail.label.dangersofplant": "Plant dangers to humans:",
+    "detail.label.cultivationtype": "Cultivation type:",
+    "detail.label.plantingstyle": "Planting style:",
+    "detail.label.plantflowercolor": "Flower colour:",
+    "detail.label.daystomaturity": "Days to maturity:",
+    "detail.label.daystoharvest": "Days to harvest:",
+    "detail.label.minimumtemperature": "Minimum temperature (°C):",
+    "detail.label.benefits": "Benefits:",
+    "detail.label.plantplantingseeddeptmm": "Seed planting depth (mm):",
+    "detail.label.plantdistance": "Planting distance (mm):",
+    "detail.label.plantdescription": "Plant description:",
+    "detail.label.plantspacefilling": "Space filling (mm):",
+    "detail.label.roottype": "Root type:",
+    "detail.label.growthhabit": "Growth habit:",
+    "detail.label.seedsurvivaltime": "Seed survival time (months):",
+    "detail.label.nativerange": "Native range:",
+    "detail.label.fruitlength": "Fruit length (mm):",
+    "detail.label.fruitwidth": "Fruit width (mm):",
+    "detail.label.fruitweight": "Fruit weight (g):",
+    "detail.label.shadetolerance": "Shade tolerance:",
+    "detail.label.moistureneed": "Moisture need:",
+    "detail.label.soilneed": "Soil need:",
+    "detail.label.phneed": "pH need:",
+    "detail.label.windtolerance": "Wind tolerance:",
+    "detail.label.growthrate": "Growth rate:",
+    "detail.label.plantsperm2": "Plants per m²:",
+    "detail.label.plantinglocation": "Planting location:",
+    "detail.label.propagation": "Propagation:",
+    "detail.label.foliagetype": "Foliage type:",
+    "detail.label.flowertype": "Flower type:",
+    "detail.label.neededpolinators": "Needed pollinators:",
+    "detail.label.leafcolor": "Leaf colour:",
+    "detail.label.storageduration": "Storage duration (months):",
+    "detail.label.yieldperplant": "Yield per plant:",
+    "detail.label.wateringregime": "Watering regime:",
+    "detail.label.companionplants": "Companion plants:",
+    "detail.label.allopaticeffect": "Allelopathic effect:",
+    "detail.label.allopaticsensitivity": "Allelopathic sensitivity:",
+    "detail.label.allopatictolerance": "Allelopathic tolerance:",
+    "detail.label.pestresistance": "Pest resistance:",
+    "detail.label.soilmicrobiology": "Soil microbiology:",
+    "detail.noPlantSelectedMsg": "Go back and choose a plant from the list or use a direct link with ?id=Plant_ID",
+    "detail.plantNotFound": "Plant not found",
+    "detail.plantNotFoundMsg": "Selected identifier does not exist in CSV data.",
+    "detail.noVarieties": "No varieties listed",
+    "detail.error.loadPlant": "Error loading plant",
+
+    // ── Calendar ──────────────────────────────────────────────────────────────
+    "cal.months": ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"],
+    "cal.tracks.planting": "Planting",
+    "cal.tracks.flowering": "Flowering",
+    "cal.tracks.harvestMaturity": "Harvest maturity",
+    "cal.tracks.eatingMaturity": "Eating maturity",
+    "cal.tracks.occupyingSpace": "Space occupying",
+    "cal.tracks.harvesting": "Harvesting",
+    "cal.tracks.harvestStoring": "Storage",
+    "cal.tracks.seedSaving": "Seed Saving",
+
+    // ── Planning table ────────────────────────────────────────────────────────
+    "planning.plantingCover": "Planting under glass",
+    "planning.plantingGround": "Planting in Ground",
+    "planning.harvestingCover": "Harvesting under glass",
+    "planning.harvestingGround": "Harvesting in Ground",
+
+    // ── NFC Generator ─────────────────────────────────────────────────────────
+    "nfcgen.page_subtitle":     "Generate NFC tags for plants",
+    "nfcgen.main_card_title":   "Selection",
+    "nfcgen.main_card_sub":     "Choose a plant and variety.",
+    "nfcgen.lbl_plant":         "Plant Name",
+    "nfcgen.opt_loading":       "Loading plants\u2026",
+    "nfcgen.lbl_variety":       "Variety",
+    "nfcgen.opt_variety":       "Select a variety\u2026",
+    "nfcgen.ph_search_plant":   "Search plants\u2026",
+    "nfcgen.ph_search_variety": "Search varieties\u2026",
+    "nfcgen.ph_custom_variety": "Enter custom variety",
+    "nfcgen.data_card_title":   "Data",
+    "nfcgen.data_card_sub":     "Data stored in NFC",
+    "nfcgen.plantId":           "Plant ID",
+    "nfcgen.nfcId":             "NFC ID",
+    "nfcgen.serialNr":          "NFC HW ID",
+    "nfcgen.lbl_latin":         "Latin Name",
+    "nfcgen.lbl_datum":         "Date",
+    "nfcgen.lbl_nfcTyp":        "NFC Type",
+    "nfcgen.opt_n":             "n \u2013 plant",
+    "nfcgen.opt_o":             "o \u2013 graft",
+    "nfcgen.opt_m":             "m \u2013 seed",
+    "nfcgen.gps_card_title":    "GPS Data",
+    "nfcgen.gps_card_sub":      "Record position in NFC",
+    "nfcgen.mode_off":          "Off",
+    "nfcgen.mode_on":           "On",
+    "nfcgen.btn_gps_start":     "Start Live Tracking",
+    "nfcgen.btn_gps_stop":      "Stop & Lock Data",
+    "nfcgen.lbl_lat":           "Latitude:",
+    "nfcgen.lbl_lon":           "Longitude:",
+    "nfcgen.lbl_alt":           "Altitude:",
+    "nfcgen.lbl_acc":           "Accuracy:",
+    "nfcgen.gps_standby":       "Status: Standing by",
+    "nfcgen.lbl_packet":        "Compressed Packet",
+    "nfcgen.no_data_locked":    "No data locked\u2026",
+    "nfcgen.gps_ready":         "Ready.",
+    "nfcgen.oth_card_title":    "Other Info",
+    "nfcgen.oth_card_sub":      "Optional extra notes",
+    "nfcgen.lbl_other_notes":   "Notes",
+    "nfcgen.ph_other_notes":    "Additional information",
+    "nfcgen.preview_title":     "NFC Preview",
+    "nfcgen.preview_sub":       "Generated data and link",
+    "nfcgen.lbl_nfc_preview":   "NFC Data",
+    "nfcgen.ph_nfc_preview":    "NFC data will appear here\u2026",
+    "nfcgen.lbl_link_preview":  "Link",
+    "nfcgen.ph_link_preview":   "Link will appear here\u2026",
+    "nfcgen.lbl_total_size":    "Total:",
+    "nfcgen.actions_title":     "Actions",
+    "nfcgen.actions_sub":       "Write, save, copy",
+    "nfcgen.btn_generate":      "Generate NFC",
+    "nfcgen.btn_write":         "Write NFC",
+    "nfcgen.btn_save":          "Save NFC",
+    "nfcgen.btn_copy_nfc":      "Copy NFC",
+    "nfcgen.btn_copy_link":     "Copy Link",
+    "nfcgen.btn_nfclist":       "NFC List",
+    "nfcgen.btn_nfcread":       "NFC Reader",
+    "nfcgen.btn_qr":            "NFC QR Code",
+    "nfcgen.btn_back":          "\u2190 Back",
+    "nfcgen.err_no_plant":      "Please select a plant and configure the NFC data",
+    "nfcgen.err_no_nfc":        "No NFC data to copy",
+    "nfcgen.err_no_link":       "No link to copy",
+    "nfcgen.err_no_save":       "Please select a plant and generate NFC data first",
+    "nfcgen.err_no_config":     "Save is not configured: set SHEET_WRITER_URL in nfcgen_test.js",
+    "nfcgen.err_save_fail":     "Failed to save NFC: ",
+    "nfcgen.err_copy_fail":     "Failed to copy: ",
+    "nfcgen.err_nfc_ns":        "Web NFC is not supported on this browser/device.",
+    "nfcgen.err_nfc_write":     "Error: ",
+    "nfcgen.err_nfc_ok":        "Successfully written to NFC tag! \u2705",
+    "nfcgen.err_save_ok":       "NFC saved to list!",
+    "nfcgen.err_copy_nfc_ok":   "NFC data copied to clipboard!",
+    "nfcgen.err_copy_link_ok":  "Link copied to clipboard!",
+    "nfcgen.err_qr_fail":       "Failed to open QR code. Please check your popup blocker.",
+    "nfcgen.err_qr_ok":         "QR code opened in new tab",
+    "nfcgen.err_nfc_tap":       "Approach the tag to the back of your phone\u2026",
+    "nfcgen.err_plant_load":    "Failed to load plant data",
+    "nfcgen.err_nfc_read":      "NFC read error: ",
+
+    // ── NFC Reader ────────────────────────────────────────────────────────────
+    "nfcread.page_subtitle":    "Read NFC tags for plants",
+    "nfcread.main_card_title":  "Selection",
+    "nfcread.main_card_sub":    "Choose a plant and variety.",
+    "nfcread.lbl_plant":        "Plant Name",
+    "nfcread.opt_loading":      "Loading plants\u2026",
+    "nfcread.lbl_variety":      "Variety",
+    "nfcread.opt_variety":      "Select a variety\u2026",
+    "nfcread.ph_custom_variety":"Enter custom variety",
+    "nfcread.data_card_title":  "Data",
+    "nfcread.data_card_sub":    "Data stored in NFC",
+    "nfcread.plantId":          "Plant ID",
+    "nfcread.nfcId":            "NFC ID",
+    "nfcread.serialNr":         "NFC serial number",
+    "nfcread.lbl_latin":        "Latin Name",
+    "nfcread.lbl_datum":        "Date",
+    "nfcread.lbl_nfcTyp":       "NFC Type",
+    "nfcread.opt_n":            "n \u2013 plant",
+    "nfcread.opt_o":            "o \u2013 graft",
+    "nfcread.opt_m":            "m \u2013 seed",
+    "nfcread.gps_card_title":   "GPS Data",
+    "nfcread.gps_card_sub":     "Record position in NFC",
+    "nfcread.mode_off":         "Off",
+    "nfcread.mode_on":          "On",
+    "nfcread.btn_gps_start":    "Start Live Tracking",
+    "nfcread.btn_gps_stop":     "Stop & Lock Data",
+    "nfcread.lbl_lat":          "Latitude:",
+    "nfcread.lbl_lon":          "Longitude:",
+    "nfcread.lbl_alt":          "Altitude:",
+    "nfcread.lbl_acc":          "Accuracy:",
+    "nfcread.gps_standby":      "Status: Standing by",
+    "nfcread.lbl_packet":       "Compressed Packet",
+    "nfcread.no_data_locked":   "No data locked\u2026",
+    "nfcread.gps_ready":        "Ready.",
+    "nfcread.oth_card_title":   "Other Info",
+    "nfcread.oth_card_sub":     "Optional extra notes",
+    "nfcread.lbl_other_notes":  "Notes",
+    "nfcread.ph_other_notes":   "Additional information",
+    "nfcread.preview_title":    "NFC Preview",
+    "nfcread.preview_sub":      "Read data and link",
+    "nfcread.lbl_nfc_preview":  "NFC Data",
+    "nfcread.ph_nfc_preview":   "NFC data will appear here\u2026",
+    "nfcread.lbl_link_preview": "Link",
+    "nfcread.ph_link_preview":  "Link will appear here\u2026",
+    "nfcread.lbl_total_size":   "Total:",
+    "nfcread.actions_title":    "Actions",
+    "nfcread.actions_sub":      "Read, copy",
+    "nfcread.btn_read":         "Read NFC",
+    "nfcread.btn_clear":        "Clear Fields",
+    "nfcread.btn_open":         "Open link",
+    "nfcread.btn_write":        "Write NFC",
+    "nfcread.btn_save":         "Save NFC",
+    "nfcread.btn_copy_nfc":     "Copy NFC",
+    "nfcread.btn_copy_link":    "Copy Link",
+    "nfcread.btn_qr":           "NFC QR Code",
+    "nfcread.btn_nfclist":      "NFC List",
+    "nfcread.btn_nfcgen":       "NFC Generator",
+    "nfcread.btn_back":         "\u2190 Back",
+    "nfcread.err_no_plant":     "Please select a plant and configure the NFC data",
+    "nfcread.err_no_nfc":       "No NFC data to copy",
+    "nfcread.err_no_link":      "No link to copy",
+    "nfcread.err_no_save":      "Please select a plant and generate NFC data first",
+    "nfcread.err_no_config":    "Save is not configured: set SHEET_WRITER_URL in nfcgen_test.js",
+    "nfcread.err_save_fail":    "Failed to save NFC: ",
+    "nfcread.err_copy_fail":    "Failed to copy: ",
+    "nfcread.err_nfc_ns":       "Web NFC is not supported on this browser/device.",
+    "nfcread.err_nfc_write":    "Error: ",
+    "nfcread.err_nfc_read":     "NFC read error: ",
+    "nfcread.err_nfc_scan_ok":  "Scanning active \u2013 tap NFC tag\u2026",
+    "nfcread.err_nfc_ok":       "Successfully written to NFC tag! \u2705",
+    "nfcread.err_save_ok":      "NFC saved to list!",
+    "nfcread.err_copy_nfc_ok":  "NFC data copied to clipboard!",
+    "nfcread.err_copy_link_ok": "Link copied to clipboard!",
+    "nfcread.err_qr_fail":      "Failed to open QR code. Please check your popup blocker.",
+    "nfcread.err_qr_ok":        "QR code opened in new tab",
+    "nfcread.err_nfc_tap":      "Approach the tag to the back of your phone\u2026",
+    "nfcread.err_plant_load":   "Failed to load plant data",
+  },
+
+  hu: {
+    // ── Home Page ─────────────────────────────────────────────────────────────
+    "home.title": "Homepage",
+    "home.subtitle": "Honlapjaim",
+    "home.card.plantpage.title": "Növény oldal",
+    "home.card.plantpage.desc": "Növények böngészése és keresése, részletes növény nézet megnyitása és NFC-címkék kezelése.",
+    "home.card.nfcgenerator.title": "NFC Generátor",
+    "home.card.nfcgenerator.desc": "NFC-címkék létrehozása és írása, amelyek a kertben lévő növény-rekordokhoz kapcsolódnak.",
+    "home.card.nfcread.title": "NFC Olvasó",
+    "home.card.nfcread.desc": "NFC-címkék olvasása, amelyek a kertben lévő növény-rekordokhoz kapcsolódnak.",
+    "home.card.nfclist.title": "NFC Lista",
+    "home.card.nfclist.desc": "NFC-címkék listája.",
+    "home.card.plantlist.title": "Növénylista",
+    "home.card.plantlist.desc": "A teljes növénylista megtekintése, szűrés család, nemzetség és fajta szerint.",
+    "home.card.seedbank.title": "Magbank",
+    "home.card.seedbank.desc": "A teljes maglista megtekintése, szűrés család, nemzetség, név és fajta szerint.",
+    "home.card.position.title": "GPS Pozíció",
+    "home.card.position.desc": "Kertben lévő növények GPS-pozícióinak rögzítése és megtekintése.",
+    "home.card.shadowmap.title": "Árnyéktérkép",
+    "home.card.shadowmap.desc": "A nap és árnyék mintázatainak vizualizálása a kertben az év folyamán.",
+    "home.card.sourdough.title": "Kovász",
+    "home.card.sourdough.desc": "Kovászos starter menetrend és sütési idővonalak kezelése.",
+    "home.card.qigong.title": "Csikung",
+    "home.card.qigong.desc": "Csikund gyakorlatok vezetett módon.",
+    
+    // ── Page titles ──────────────────────────────────────────────────────────
+    "page.title.plantpage": "N\u00f6v\u00e9ny Oldal",
+    "page.title.list": "N\u00f6v\u00e9nylista",
+    "page.title.detail": "N\u00f6v\u00e9ny Adatlap",
+    "page.title.nfcList": "NFC Lista",
+
+    // ── Plantpage ─────────────────────────────────────────────────────────────
+    "plantpage.heading": "N\u00f6v\u00e9ny Oldal",
+    "plantpage.subtitle": "V\u00e1lasszon n\u00f6v\u00e9nyt \u00e9s nyissa meg a r\u00e9szletes n\u00e9zetet.",
+    "plantpage.label.plantName": "N\u00f6v\u00e9ny neve",
+    "plantpage.label.variety": "Fajta",
+    "plantpage.btn.openView": "N\u00f6v\u00e9ny n\u00e9zet megnyit\u00e1sa",
+    "plantpage.btn.back": "\u2190 Vissza",
+    "plantpage.btn.nfcGenerator": "NFC Gener\u00e1tor",
+    "plantpage.btn.nfcRead": "NFC Olvas\u00F3",
+    "plantpage.panel.selection.title": "Kiv\u00e1laszt\u00e1s",
+    "plantpage.panel.selection.subtitle": "V\u00e1lasszon n\u00f6v\u00e9nyt \u00e9s fajt\u00e1t.",
+    "plantpage.subtitle.lists": "List\u00e1k",
+    "plantpage.label.family": "Csal\u00e1d",
+    "plantpage.label.genus": "Nemzetség",
+    "plantpage.label.latinName": "Latin n\u00e9v",
+    "plantpage.btn.openList": "N\u00f6v\u00e9nylista megnyit\u00e1sa",
+    "plantpage.subtitle.pages": "Oldalak",
+    "plantpage.btn.nfcList": "NFC Lista",
+    "plantpage.btn.shadowMap": "\u00c1rny\u00e9kt\u00e9rk\u00e9p",
+    "plantpage.placeholder.selectPlant": "V\u00e1lasszon n\u00f6v\u00e9nyt",
+    "plantpage.placeholder.loadingPlants": "N\u00f6v\u00e9nyek bet\u00f6lt\u00e9se\u2026",
+    "plantpage.placeholder.loadingVarieties": "Fajt\u00e1k bet\u00f6lt\u00e9se\u2026",
+    "plantpage.placeholder.allFamilies": "\u00d6sszes csal\u00e1d",
+    "plantpage.placeholder.allGenera": "\u00d6sszes nemzetség",
+    "plantpage.placeholder.allLatinNames": "\u00d6sszes latin n\u00e9v",
+    "plantpage.placeholder.searchPlants": "Keres\u00e9s n\u00f6v\u00e9nyek k\u00f6z\u00f6tt\u2026",
+    "plantpage.placeholder.searchVarieties": "Keres\u00e9s fajt\u00e1k k\u00f6z\u00f6tt\u2026",
+    "plantpage.error.loadFailed": "Nem siker\u00fclt bet\u00f6lteni a n\u00f6v\u00e9ny adatokat",
+    "plantpage.error.option": "(hiba)",
+
+    // ── Plant List Page ───────────────────────────────────────────────────────
+    "list.title": "N\u00f6v\u00e9nylista",
+    "list.btn.back": "\u2190 Vissza",
+    "list.allPlants": "\u00d6sszes n\u00f6v\u00e9ny",
+    "list.filter.family": "Csal\u00e1d",
+    "list.filter.genus": "Nemzetség",
+    "list.filter.latin": "Latin N\u00e9v",
+    "list.filter.nameEn": "N\u00e9v (EN)",
+    "list.filter.nameHu": "N\u00e9v (HU)",
+    "list.filter.variety": "Fajta",
+    "list.filter.allGenera": "\u00d6sszes nemzetség",
+    "list.filter.allFamilies": "\u00d6sszes csal\u00e1d",
+    "list.filter.allLatinNames": "\u00d6sszes latin n\u00e9v",
+    "list.filter.allNameEn": "\u00d6sszes n\u00e9v (EN)",
+    "list.filter.allNameHu": "\u00d6sszes n\u00f6v\u00e9ny",
+    "list.filter.allVarieties": "\u00d6sszes fajta",
+    "list.filter.search": "Keres\u00e9s\u2026",
+    "list.table.plantId": "N.ID",
+    "list.table.latinName": "Latin N\u00e9v",
+    "list.table.variety": "Fajta",
+    "list.table.nameEN": "N\u00e9v (EN)",
+    "list.table.nameHU": "N\u00e9v (HU)",
+    "list.loading": "Bet\u00f6lt\u00e9s\u2026",
+    "list.error.loadFailed": "Nem siker\u00fclt bet\u00f6lteni a n\u00f6v\u00e9ny adatokat",
+    "list.error.loadData": "Hiba az adatok bet\u00f6lt\u00e9sekor",
+    "list.empty": "Nem tal\u00e1lhat\u00f3 n\u00f6v\u00e9ny",
+
+    // ── Seedbank Page ─────────────────────────────────────────────────────────
+    "seedbank.title": "Magbank",
+    "seedbank.table.seedav": "Mag el\u00e9rhet\u0151s\u00e9g",
+    "seedbank.table.seedbank": "Magbank",
+    "seedbank.table.year": "\u00c9v",
+    "seedbank.filter.allSeedbanks": "\u00d6sszes magbank",
+    "seedbank.filter.allYears": "\u00d6sszes \u00e9v",
+
+    // ── NFC List Page ─────────────────────────────────────────────────────────
+    "nfc.title": "NFC Lista",
+    "nfc.btn.back": "\u2190 Vissza",
+    "nfc.allRecords": "\u00d6sszes NFC bejegyz\u00e9s",
+    "nfc.table.id": "NFC ID",
+    "nfc.table.nfcText": "NFC Sz\u00f6veg",
+    "nfc.table.link": "Link",
+    "nfc.table.plantId": "N\u00f6v\u00e9ny ID",
+    "nfc.table.created": "L\u00e9trehozva",
+    "nfc.table.datum": "D\u00e1tum",
+    "nfc.table.location": "Helysz\u00edn",
+    "nfc.table.nfcStatus": "NFC St\u00e1tus",
+    "nfc.table.nfcType": "NFC T\u00edpus",
+    "nfc.table.nfcSerial": "NFC sorozatsz\u00e1m",
+    "nfc.table.nfcPosition": "GPS Poz\u00edci\u00f3",
+    "nfc.table.other": "Egy\u00e9b",
+    "nfc.filter.allNfcIds": "\u00d6sszes NFC ID",
+    "nfc.filter.allPlantIds": "\u00d6sszes n\u00f6v\u00e9ny ID",
+    "nfc.filter.allFamilies": "\u00d6sszes csal\u00e1d",
+    "nfc.filter.allGenera": "\u00d6sszes nemzetség",
+    "nfc.filter.allLatinNames": "\u00d6sszes latin n\u00e9v",
+    "nfc.filter.allVarieties": "\u00d6sszes fajta",
+    "nfc.filter.search": "Keres\u00e9s\u2026",
+    "nfc.loading": "Bet\u00f6lt\u00e9s\u2026",
+    "nfc.error.loadFailed": "Nem siker\u00fclt bet\u00f6lteni az NFC adatokat",
+    "nfc.error.loadData": "Hiba az adatok bet\u00f6lt\u00e9sekor",
+    "nfc.empty": "Nem tal\u00e1lhat\u00f3 NFC bejegyz\u00e9s",
+
+    // ── Plant Detail Page (P.html) ────────────────────────────────────────────
+    "detail.btn.back": "\u2190 Vissza",
+    "detail.section.nfcLink": "NFC Link",
+    "detail.label.names": "Nevek:",
+    "detail.label.datastatus": "Adatb\u00e1zis m\u00e9g hi\u00e1nyos!",
+    "detail.label.edibilityTitle": "Fogyaszthat\u00f3s\u00e1g:",
+    "detail.label.medicinalTitle": "Gy\u00f3gy\u00e1szat:",
+    "detail.legend.edibleRaw": "Z\u00f6ld = Nyers fogyaszthat\u00f3",
+    "detail.legend.ediblePrepared": "S\u00e1rga = Csak elk\u00e9sz\u00edtve fogyaszthat\u00f3",
+    "detail.legend.toxic": "Piros = M\u00e9rgez\u0151",
+    "detail.legend.inedible": "Fekete = Nem fogyaszthat\u00f3",
+    "detail.label.uses": "Felhaszn\u00e1l\u00e1s:",
+    "detail.label.onlypreparedediblepartsall": "Elk\u00e9sz\u00edt\u00e9si m\u00f3d:",
+    "detail.label.medicinalParts": "Gy\u00f3gy\u00e1szati r\u00e9szek:",
+    "detail.label.medicinalUse": "Gy\u00f3gy\u00e1szati felhaszn\u00e1l\u00e1s:",
+    "detail.section.calendar": "Napt\u00e1r",
+    "detail.section.planning": "TERVEZ\u00c9S",
+    "detail.section.varieties": "Fajt\u00e1k list\u00e1ja",
+    "detail.label.plantFlowerColor": "Vir\u00e1g sz\u00edne",
+    "detail.label.plantType": "N\u00f6v\u00e9ny t\u00edpusa:",
+    "detail.label.hardinesszoneusda": "Hidegtűrés:",
+    "detail.label.edibleParts": "Fogyaszthat\u00f3 r\u00e9szek:",
+    "detail.label.preparedEdibleParts": "Csak elk\u00e9sz\u00edtve fogyaszthat\u00f3 r\u00e9szek:",
+    "detail.label.toxicParts": "M\u00e9rgez\u0151 r\u00e9szek:",
+    "detail.label.daysToHarvest": "Napok betakar\u00edt\u00e1sig:",
+    "detail.label.daysToMaturity": "Napok \u00e9r\u00e9sig:",
+    "detail.label.daysToGermination": "Cs\u00edr\u00e1z\u00e1si napok:",
+    "detail.label.seedDepth": "Vet\u00e9si m\u00e9lys\u00e9g (mm):",
+    "detail.label.seedSoilTemp": "Vet\u00e9si talajh\u0151m\u00e9rs\u00e9klet (\u00b0C):",
+    "detail.label.plantDistance": "\u00dcltet\u00e9si t\u00e1vols\u00e1g (mm):",
+    "detail.label.plantDescription": "N\u00f6v\u00e9ny le\u00edr\u00e1sa:",
+    "detail.label.plantHeightMax": "N\u00f6v\u00e9ny max. magass\u00e1ga (mm):",
+    "detail.label.plantHeightAvg": "N\u00f6v\u00e9ny \u00e1tl. magass\u00e1ga (mm):",
+    "detail.label.plantWidthAvg": "N\u00f6v\u00e9ny \u00e1tl. sz\u00e9less\u00e9ge (mm):",
+    "detail.label.plantSpaceFilling": "Ter\u00fcletfoglal\u00e1s (mm):",
+    "detail.label.rootType": "Gy\u00f6k\u00e9r t\u00edpusa:",
+    "detail.label.lifecycle": "N\u00f6veked\u00e9si \u00e9letciklus:",
+    "detail.label.growingHabit": "N\u00f6veked\u00e9si szok\u00e1s:",
+    "detail.label.seedGerminationTime": "Cs\u00edr\u00e1z\u00e1si id\u0151 (nap):",
+    "detail.label.seedSurvivalTime": "Mag \u00e9letk\u00e9pess\u00e9gi id\u0151 (h\u00f3nap):",
+    "detail.label.dangersToHumans": "Vesz\u00e9lyek az emberre:",
+    "detail.label.dangersofplant": "Veszélyek az emberre:",
+    "detail.label.daystogermination": "Csírázási napok:",
+    "detail.label.cultivationtype": "Termesztési típus:",
+    "detail.label.plantingstyle": "Ültetési stílus:",
+    "detail.label.plantflowercolor": "Virág színe:",
+    "detail.label.daystomaturity": "Napok éréséig:",
+    "detail.label.daystoharvest": "Napok betakarításig:",
+    "detail.label.minimumtemperature": "Minimális hőmérséklet (°C):",
+    "detail.label.benefits": "Előnyök:",
+    "detail.label.plantplantingseeddeptmm": "Vetési mélység (mm):",
+    "detail.label.plantdistance": "Ültetési távolság (mm):",
+    "detail.label.plantdescription": "Növény leírása:",
+    "detail.label.plantspacefilling": "Területfoglalás (mm):",
+    "detail.label.roottype": "Gyökér típusa:",
+    "detail.label.growthhabit": "Növekedési szokás:",
+    "detail.label.seedsurvivaltime": "Mag életképességi idő (hónap):",
+    "detail.label.nativerange": "Természetes elterjedési terület:",
+    "detail.label.fruitlength": "Termés hossza (mm):",
+    "detail.label.fruitwidth": "Termés szélessége (mm):",
+    "detail.label.fruitweight": "Termés tömege (g):",
+    "detail.label.shadetolerance": "Árnyéktűrés:",
+    "detail.label.moistureneed": "Nedvességigény:",
+    "detail.label.soilneed": "Talajigény:",
+    "detail.label.phneed": "pH igény:",
+    "detail.label.windtolerance": "Széltűrés:",
+    "detail.label.growthrate": "Növekedési ütem:",
+    "detail.label.plantsperm2": "Növény/m²:",
+    "detail.label.plantinglocation": "Ültetési helyszín:",
+    "detail.label.propagation": "Szaporítás:",
+    "detail.label.foliagetype": "Lombozat típusa:",
+    "detail.label.flowertype": "Virág típusa:",
+    "detail.label.neededpolinators": "Szükséges beporzók:",
+    "detail.label.leafcolor": "Levél színe:",
+    "detail.label.storageduration": "Tárolási idő (hónap):",
+    "detail.label.yieldperplant": "Hozam növényenként:",
+    "detail.label.wateringregime": "Öntözési rend:",
+    "detail.label.companionplants": "Társnövények:",
+    "detail.label.allopaticeffect": "Allelopatikus hatás:",
+    "detail.label.allopaticsensitivity": "Allelopatikus érzékenység:",
+    "detail.label.allopatictolerance": "Allelopatikus tolerancia:",
+    "detail.label.pestresistance": "Kártevő-ellenállás:",
+    "detail.label.soilmicrobiology": "Talajmikrobiológia:",
+    "detail.noPlantSelected": "Nincs növény kiválasztva",
+    "detail.noPlantSelectedMsg": "Menjen vissza \u00e9s v\u00e1lasszon n\u00f6v\u00e9nyt a list\u00e1b\u00f3l vagy haszn\u00e1ljon k\u00f6zvetlen linket ?id=Plant_ID form\u00e1tumban",
+    "detail.plantNotFound": "A n\u00f6v\u00e9ny nem tal\u00e1lhat\u00f3",
+    "detail.plantNotFoundMsg": "A kiv\u00e1lasztott azonos\u00edt\u00f3 nem szerepel az adatb\u00e1zisban.",
+    "detail.noVarieties": "Nincs fajta felsorolva",
+    "detail.error.loadPlant": "Hiba a n\u00f6v\u00e9ny bet\u00f6lt\u00e9sekor",
+
+    // ── Calendar ──────────────────────────────────────────────────────────────
+    "cal.months": ["JAN.", "FEBR.", "M\u00c1RC.", "\u00c1PR.", "M\u00c1J.", "J\u00daN.", "J\u00daL.", "AUG.", "SZEPT.", "OKT.", "NOV.", "DEC."],
+    "cal.tracks.planting": "\u00dcltet\u00e9s",
+    "cal.tracks.flowering": "Vir\u00e1gz\u00e1s",
+    "cal.tracks.harvestMaturity": "Szed\u00e9s\u00e9rettség",
+    "cal.tracks.eatingMaturity": "Fogyaszt\u00e1s\u00e9rettség",
+    "cal.tracks.occupyingSpace": "Helyfoglal\u00e1s",
+    "cal.tracks.harvesting": "Betakar\u00edt\u00e1s",
+    "cal.tracks.harvestStoring": "T\u00e1rol\u00e1s",
+    "cal.tracks.seedSaving": "Magfog\u00e1s",
+
+    // ── Planning table ────────────────────────────────────────────────────────
+    "planning.plantingCover": "\u00dcltet\u00e9s \u00fcveg alatt",
+    "planning.plantingGround": "\u00dcltet\u00e9s szabadban",
+    "planning.harvestingCover": "Betakar\u00edt\u00e1s \u00fcveg alatt",
+    "planning.harvestingGround": "Betakar\u00edt\u00e1s szabadban",
+
+    // ── NFC Generator ─────────────────────────────────────────────────────────
+    "nfcgen.page_subtitle":     "NFC cimk\u00e9k gener\u00e1l\u00e1sa n\u00f6v\u00e9nyekhez",
+    "nfcgen.main_card_title":   "Kiv\u00e1laszt\u00e1s",
+    "nfcgen.main_card_sub":     "V\u00e1lassz n\u00f6v\u00e9nyt \u00e9s fajt\u00e1t.",
+    "nfcgen.lbl_plant":         "N\u00f6v\u00e9ny neve",
+    "nfcgen.opt_loading":       "N\u00f6v\u00e9nyek bet\u00f6lt\u00e9se\u2026",
+    "nfcgen.lbl_variety":       "Fajta",
+    "nfcgen.opt_variety":       "V\u00e1lassz fajt\u00e1t\u2026",
+    "nfcgen.ph_search_plant":   "Keres\u00e9s n\u00f6v\u00e9nyek k\u00f6z\u00f6tt\u2026",
+    "nfcgen.ph_search_variety": "Keres\u00e9s fajt\u00e1k k\u00f6z\u00f6tt\u2026",
+    "nfcgen.ph_custom_variety": "Egyedi fajta megad\u00e1sa",
+    "nfcgen.data_card_title":   "Adatok",
+    "nfcgen.data_card_sub":     "Az NFC-be ker\u00fcl\u0151 adatok",
+    "nfcgen.plantId":           "N\u00f6v. ID",
+    "nfcgen.nfcId":             "NFC ID",
+    "nfcgen.serialNr":          "NFC HW ID",
+    "nfcgen.lbl_latin":         "Latin n\u00e9v",
+    "nfcgen.lbl_datum":         "D\u00e1tum",
+    "nfcgen.lbl_nfcTyp":        "NFC t\u00edpus",
+    "nfcgen.opt_n":             "n \u2013 n\u00f6v\u00e9ny",
+    "nfcgen.opt_o":             "o \u2013 olt\u00e1s",
+    "nfcgen.opt_m":             "m \u2013 mag",
+    "nfcgen.gps_card_title":    "GPS adatok",
+    "nfcgen.gps_card_sub":      "Poz\u00edci\u00f3 r\u00f6gz\u00edt\u00e9se az NFC-be",
+    "nfcgen.mode_off":          "Ki",
+    "nfcgen.mode_on":           "Be",
+    "nfcgen.btn_gps_start":     "\u00c9l\u0151 k\u00f6vet\u00e9s ind\u00edt\u00e1sa",
+    "nfcgen.btn_gps_stop":      "Le\u00e1ll\u00edt\u00e1s \u00e9s r\u00f6gz\u00edt\u00e9s",
+    "nfcgen.lbl_lat":           "Sz\u00e9less\u00e9g:",
+    "nfcgen.lbl_lon":           "Hossz\u00fas\u00e1g:",
+    "nfcgen.lbl_alt":           "Magass\u00e1g:",
+    "nfcgen.lbl_acc":           "Pontoss\u00e1g:",
+    "nfcgen.gps_standby":       "\u00c1llapot: V\u00e1rakoz\u00e1s",
+    "nfcgen.lbl_packet":        "T\u00f6m\u00f6r\u00edtett csomag",
+    "nfcgen.no_data_locked":    "Nincs r\u00f6gz\u00edtett adat\u2026",
+    "nfcgen.gps_ready":         "K\u00e9sz.",
+    "nfcgen.oth_card_title":    "Egy\u00e9b info",
+    "nfcgen.oth_card_sub":      "Opcion\u00e1lis megjegyz\u00e9sek",
+    "nfcgen.lbl_other_notes":   "Megjegyz\u00e9sek",
+    "nfcgen.ph_other_notes":    "Tov\u00e1bbi inform\u00e1ci\u00f3",
+    "nfcgen.preview_title":     "NFC el\u0151n\u00e9zet",
+    "nfcgen.preview_sub":       "Gener\u00e1lt adat \u00e9s hivatkoz\u00e1s",
+    "nfcgen.lbl_nfc_preview":   "NFC adat",
+    "nfcgen.ph_nfc_preview":    "Az NFC adat itt jelenik meg\u2026",
+    "nfcgen.lbl_link_preview":  "Hivatkoz\u00e1s",
+    "nfcgen.ph_link_preview":   "A hivatkoz\u00e1s itt jelenik meg\u2026",
+    "nfcgen.lbl_total_size":    "\u00d6sszesen:",
+    "nfcgen.actions_title":     "M\u0171veletek",
+    "nfcgen.actions_sub":       "\u00edr\u00e1s, ment\u00e9s, m\u00e1sol\u00e1s",
+    "nfcgen.btn_generate":      "NFC gener\u00e1l\u00e1sa",
+    "nfcgen.btn_write":         "NFC \u00edr\u00e1sa",
+    "nfcgen.btn_save":          "NFC ment\u00e9se",
+    "nfcgen.btn_copy_nfc":      "NFC m\u00e1sol\u00e1sa",
+    "nfcgen.btn_copy_link":     "Hivatkoz\u00e1s m\u00e1sol\u00e1sa",
+    "nfcgen.btn_nfclist":       "NFC Lista",
+    "nfcgen.btn_nfcread":       "NFC Olvas\u00f3",
+    "nfcgen.btn_qr":            "NFC QR k\u00f3d",
+    "nfcgen.btn_back":          "\u2190 Vissza",
+    "nfcgen.err_no_plant":      "K\u00e9rlek v\u00e1lassz n\u00f6v\u00e9nyt \u00e9s \u00e1ll\u00edtsd be az NFC adatokat",
+    "nfcgen.err_no_nfc":        "Nincs NFC adat a m\u00e1sol\u00e1shoz",
+    "nfcgen.err_no_link":       "Nincs hivatkoz\u00e1s a m\u00e1sol\u00e1shoz",
+    "nfcgen.err_no_save":       "K\u00e9rlek v\u00e1lassz n\u00f6v\u00e9nyt \u00e9s gener\u00e1lj NFC adatot el\u0151bb",
+    "nfcgen.err_no_config":     "A ment\u00e9s nincs be\u00e1ll\u00edtva: add meg a SHEET_WRITER_URL \u00e9rt\u00e9k\u00e9t",
+    "nfcgen.err_save_fail":     "Ment\u00e9s sikertelen: ",
+    "nfcgen.err_copy_fail":     "M\u00e1sol\u00e1s sikertelen: ",
+    "nfcgen.err_nfc_ns":        "A Web NFC nem t\u00e1mogatott ezen a b\u00f6ng\u00e9sz\u0151n/eszk\u00f6z\u00f6n.",
+    "nfcgen.err_nfc_write":     "Hiba: ",
+    "nfcgen.err_nfc_ok":        "Sikeresen \u00edrva az NFC cimk\u00e9re! \u2705",
+    "nfcgen.err_save_ok":       "NFC mentve a list\u00e1ba!",
+    "nfcgen.err_copy_nfc_ok":   "NFC adat v\u00e1g\u00f3lapra m\u00e1solva!",
+    "nfcgen.err_copy_link_ok":  "Hivatkoz\u00e1s v\u00e1g\u00f3lapra m\u00e1solva!",
+    "nfcgen.err_qr_fail":       "Nem siker\u00fclt megnyitni a QR k\u00f3dot. Ellen\u0151rizd a felugr\u00f3 ablakokat.",
+    "nfcgen.err_qr_ok":         "QR k\u00f3d megny\u00edlt \u00faj lapon",
+    "nfcgen.err_nfc_tap":       "Tartsd a telefon h\u00e1t\u00e1hoz az NFC cimk\u00e9t\u2026",
+    "nfcgen.err_plant_load":    "Nem siker\u00fclt bet\u00f6lteni a n\u00f6v\u00e9ny adatokat",
+    "nfcgen.err_nfc_read":      "NFC olvas\u00e1si hiba: ",
+
+    // ── NFC Reader ────────────────────────────────────────────────────────────
+    "nfcread.page_subtitle":    "NFC cimk\u00e9k beolvas\u00e1sa n\u00f6v\u00e9nyekhez",
+    "nfcread.main_card_title":  "Kiv\u00e1laszt\u00e1s",
+    "nfcread.main_card_sub":    "V\u00e1lassz n\u00f6v\u00e9nyt \u00e9s fajt\u00e1t.",
+    "nfcread.lbl_plant":        "N\u00f6v\u00e9ny neve",
+    "nfcread.opt_loading":      "N\u00f6v\u00e9nyek bet\u00f6lt\u00e9se\u2026",
+    "nfcread.lbl_variety":      "Fajta",
+    "nfcread.opt_variety":      "V\u00e1lassz fajt\u00e1t\u2026",
+    "nfcread.ph_custom_variety":"Egyedi fajta megad\u00e1sa",
+    "nfcread.data_card_title":  "Adatok",
+    "nfcread.data_card_sub":    "Az NFC-be ker\u00fcl\u0151 adatok",
+    "nfcread.plantId":          "N\u00f6v. ID",
+    "nfcread.nfcId":            "NFC ID",
+    "nfcread.serialNr":         "NFC gy\u00e1rt\u00e1si sz\u00e1m",
+    "nfcread.lbl_latin":        "Latin n\u00e9v",
+    "nfcread.lbl_datum":        "D\u00e1tum",
+    "nfcread.lbl_nfcTyp":       "NFC t\u00edpus",
+    "nfcread.opt_n":            "n \u2013 n\u00f6v\u00e9ny",
+    "nfcread.opt_o":            "o \u2013 olt\u00e1s",
+    "nfcread.opt_m":            "m \u2013 mag",
+    "nfcread.gps_card_title":   "GPS adatok",
+    "nfcread.gps_card_sub":     "Poz\u00edci\u00f3 r\u00f6gz\u00edt\u00e9se az NFC-be",
+    "nfcread.mode_off":         "Ki",
+    "nfcread.mode_on":          "Be",
+    "nfcread.btn_gps_start":    "\u00c9l\u0151 k\u00f6vet\u00e9s ind\u00edt\u00e1sa",
+    "nfcread.btn_gps_stop":     "Le\u00e1ll\u00edt\u00e1s \u00e9s r\u00f6gz\u00edt\u00e9s",
+    "nfcread.lbl_lat":          "Sz\u00e9less\u00e9g:",
+    "nfcread.lbl_lon":          "Hossz\u00fas\u00e1g:",
+    "nfcread.lbl_alt":          "Magass\u00e1g:",
+    "nfcread.lbl_acc":          "Pontoss\u00e1g:",
+    "nfcread.gps_standby":      "\u00c1llapot: V\u00e1rakoz\u00e1s",
+    "nfcread.lbl_packet":       "T\u00f6m\u00f6r\u00edtett csomag",
+    "nfcread.no_data_locked":   "Nincs r\u00f6gz\u00edtett adat\u2026",
+    "nfcread.gps_ready":        "K\u00e9sz.",
+    "nfcread.oth_card_title":   "Egy\u00e9b info",
+    "nfcread.oth_card_sub":     "Opcion\u00e1lis megjegyz\u00e9sek",
+    "nfcread.lbl_other_notes":  "Megjegyz\u00e9sek",
+    "nfcread.ph_other_notes":   "Tov\u00e1bbi inform\u00e1ci\u00f3",
+    "nfcread.preview_title":    "NFC el\u0151n\u00e9zet",
+    "nfcread.preview_sub":      "Beolvasott adat \u00e9s hivatkoz\u00e1s",
+    "nfcread.lbl_nfc_preview":  "NFC adat",
+    "nfcread.ph_nfc_preview":   "Az NFC adat itt jelenik meg\u2026",
+    "nfcread.lbl_link_preview": "Hivatkoz\u00e1s",
+    "nfcread.ph_link_preview":  "A hivatkoz\u00e1s itt jelenik meg\u2026",
+    "nfcread.lbl_total_size":   "\u00d6sszesen:",
+    "nfcread.actions_title":    "M\u0171veletek",
+    "nfcread.actions_sub":      "Olvas\u00e1s, m\u00e1sol\u00e1s",
+    "nfcread.btn_read":         "NFC olvas\u00e1sa",
+    "nfcread.btn_clear":        "Mez\u0151k t\u00f6rl\u00e9se",
+    "nfcread.btn_open":         "Link megnyit\u00e1sa",
+    "nfcread.btn_write":        "NFC \u00edr\u00e1sa",
+    "nfcread.btn_save":         "NFC ment\u00e9se",
+    "nfcread.btn_copy_nfc":     "NFC m\u00e1sol\u00e1sa",
+    "nfcread.btn_copy_link":    "Hivatkoz\u00e1s m\u00e1sol\u00e1sa",
+    "nfcread.btn_qr":           "NFC QR k\u00f3d",
+    "nfcread.btn_nfclist":      "NFC Lista",
+    "nfcread.btn_nfcgen":       "NFC Gener\u00e1tor",
+    "nfcread.btn_back":         "\u2190 Vissza",
+    "nfcread.err_no_plant":     "K\u00e9rlek v\u00e1lassz n\u00f6v\u00e9nyt \u00e9s \u00e1ll\u00edtsd be az NFC adatokat",
+    "nfcread.err_no_nfc":       "Nincs NFC adat a m\u00e1sol\u00e1shoz",
+    "nfcread.err_no_link":      "Nincs hivatkoz\u00e1s a m\u00e1sol\u00e1shoz",
+    "nfcread.err_no_save":      "K\u00e9rlek v\u00e1lassz n\u00f6v\u00e9nyt \u00e9s gener\u00e1lj NFC adatot el\u0151bb",
+    "nfcread.err_no_config":    "A ment\u00e9s nincs be\u00e1ll\u00edtva: add meg a SHEET_WRITER_URL \u00e9rt\u00e9k\u00e9t",
+    "nfcread.err_save_fail":    "Ment\u00e9s sikertelen: ",
+    "nfcread.err_copy_fail":    "M\u00e1sol\u00e1s sikertelen: ",
+    "nfcread.err_nfc_ns":       "A Web NFC nem t\u00e1mogatott ezen a b\u00f6ng\u00e9sz\u0151n/eszk\u00f6z\u00f6n.",
+    "nfcread.err_nfc_write":    "Hiba: ",
+    "nfcread.err_nfc_read":     "NFC olvas\u00e1si hiba: ",
+    "nfcread.err_nfc_scan_ok":  "Szkenn\u00e9l\u00e9s akt\u00edv \u2013 tartsd oda az NFC cimk\u00e9t\u2026",
+    "nfcread.err_nfc_ok":       "Sikeresen \u00edrva az NFC cimk\u00e9re! \u2705",
+    "nfcread.err_save_ok":      "NFC mentve a list\u00e1ba!",
+    "nfcread.err_copy_nfc_ok":  "NFC adat v\u00e1g\u00f3lapra m\u00e1solva!",
+    "nfcread.err_copy_link_ok": "Hivatkoz\u00e1s v\u00e1g\u00f3lapra m\u00e1solva!",
+    "nfcread.err_qr_fail":      "Nem siker\u00fclt megnyitni a QR k\u00f3dot. Ellen\u0151rizd a felugr\u00f3 ablakokat.",
+    "nfcread.err_qr_ok":        "QR k\u00f3d megny\u00edlt \u00faj lapon",
+    "nfcread.err_nfc_tap":      "Tartsd a telefon h\u00e1t\u00e1hoz az NFC cimk\u00e9t\u2026",
+    "nfcread.err_plant_load":   "Nem siker\u00fclt bet\u00f6lteni a n\u00f6v\u00e9ny adatokat",
+  },
+};
+
+/**
+ * Language management utilities.
+ * Reads/writes the current language from localStorage and applies translations
+ * to elements that have a data-i18n attribute.
+ *
+ * Usage:
+ *   import { t, applyTranslations, setupLanguageButtons } from './lang.js';
+ *
+ *   // Get a translated string
+ *   const label = t('home.label.plantName');
+ *
+ *   // Apply all data-i18n translations to the DOM
+ *   applyTranslations();
+ *
+ *   // Wire up .lang-btn buttons and apply initial translations
+ *   setupLanguageButtons();
+ */
+
+
+const LANG_KEY = 'fuvesztar_lang';
+
+/** Returns the currently active language code ('hu' or 'en'). Default: 'hu'. */
+function getCurrentLang() {
+  return localStorage.getItem(LANG_KEY) || 'hu';
+}
+
+/** Persists the selected language and reloads the page to apply it. */
+function setCurrentLang(lang) {
+  localStorage.setItem(LANG_KEY, lang);
+  window.location.reload();
+}
+
+/**
+ * Returns the translated string for the given key in the current language.
+ * Falls back to the key itself if no translation is found.
+ */
+function t(key) {
+  const lang = getCurrentLang();
+  const dict = TRANSLATIONS[lang] || TRANSLATIONS['hu'];
+  const value = dict[key];
+  if (value !== undefined) return value;
+  // Try the other language as fallback
+  const fallback = TRANSLATIONS['en'] || {};
+  return fallback[key] !== undefined ? fallback[key] : key;
+}
+
+/**
+ * Applies translations to every element with a [data-i18n] attribute.
+ * Also handles [data-i18n-placeholder] for input placeholders and
+ * [data-i18n-aria] for aria-label attributes.
+ */
+function applyTranslations() {
+  document.querySelectorAll('[data-i18n]').forEach((el) => {
+    const key = el.getAttribute('data-i18n');
+    const value = t(key);
+    if (typeof value === 'string') {
+      el.textContent = value;
+    }
+  });
+
+  document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-placeholder');
+    const value = t(key);
+    if (typeof value === 'string') {
+      el.placeholder = value;
+    }
+  });
+
+  document.querySelectorAll('[data-i18n-aria]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-aria');
+    const value = t(key);
+    if (typeof value === 'string') {
+      el.setAttribute('aria-label', value);
+    }
+  });
+
+  // Update the page <title> if a data-i18n-title attribute is present on <html>
+  const htmlEl = document.documentElement;
+  const titleKey = htmlEl.getAttribute('data-i18n-title');
+  if (titleKey) {
+    const value = t(titleKey);
+    if (typeof value === 'string') document.title = value;
+  }
+}
+
+/** Updates the visual active state of language buttons. */
+function updateLanguageButtons() {
+  const lang = getCurrentLang();
+  document.querySelectorAll('.lang-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.getAttribute('data-lang') === lang);
+  });
+}
+
+/**
+ * Wires up .lang-btn buttons so clicking them stores the chosen language
+ * and reloads the page to apply it. Also applies translations immediately.
+ */
+function setupLanguageButtons() {
+  document.querySelectorAll('.lang-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const lang = btn.getAttribute('data-lang');
+      if (lang && lang !== getCurrentLang()) {
+        setCurrentLang(lang);
+      }
+    });
+  });
+  updateLanguageButtons();
+  applyTranslations();
+}
+
+  </script>
+
+  <!-- Script 3: Generator logic IIFE -->
+  <script>
+(function() {
+
+// ── Google Apps Script Web App configuration ─────────────────────────────────
+// Deploy scripts/sheetwriter.js as a Google Apps Script Web App and paste the
+// resulting URL below.  Also set the same SECRET_KEY in Script Properties.
+// See scripts/sheetwriter.js for full deployment instructions.
+//
+// Security note: SHEET_WRITER_SECRET is visible in page source.  It provides
+// write-only authorization (no data can be read via this key) and is combined
+// with rate limiting and input validation in the Apps Script to prevent abuse.
+// Keep the SECRET_KEY long and random; treat the Web App URL as semi-private.
+const SHEET_WRITER_URL    = 'https://script.google.com/macros/s/AKfycbysWB68AM6TKlobnA3MLR_18LpJjGVkHolPf3G_WNziV3r93_fztJIenTVSoll-Kmtp/exec';
+const SHEET_WRITER_SECRET = '159753g9d5rt4Ht4eg7e5z4d6szo89fsef';
+
+const READ_SHEET_ID = '1QHJzWztssucMlnozk2tV9ym6gLedgDj4Zh3DzCTFWCY';
+const READ_SHEET_NAME = 'plant_list';
+
+/**
+ * Fetch raw Google Visualization API response with an optional TQ query.
+ */
+async function fetchSheetResponseQR(tq = '') {
+  const params = new URLSearchParams({
+    tqx: 'out:json',
+    sheet: READ_SHEET_NAME,
+    ...(tq && { tq }),
+  });
+  const url = `https://docs.google.com/spreadsheets/d/${READ_SHEET_ID}/gviz/tq?${params}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Google Sheets request failed: ${response.status} ${response.statusText}`);
+  }
+  const text = await response.text();
+  const match = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*?)\)\s*;?\s*$/);
+  if (!match) {
+    throw new Error('Unexpected Google Sheets API response format');
+  }
+  return JSON.parse(match[1]);
+}
+/** For NFC Generator page
+ * Load Plant_ID, LatinName, Name_Variety, Name_HU, Name_EN
+ * for all rows where Active_in_NFC = "Y".
+ * Minimal traffic: only 5 columns, only active rows.
+ *
+ * @returns {Object[]} Array of plant objects with the selected fields.
+ */
+async function loadActiveNFCPlants() {
+  // You must use column letters, not header names, in the tq query
+  // A=Plant_ID, B=LatinName, C=Name_Variety, D=Name_HU, E=Name_EN , CR = Active_in_NFC
+  // Adjust the letters if your columns are in a different order!
+  const tq = `select A, B, C, D, E where CR = 'Y'`;
+  console.log("Loading from datasource");
+  const gvizResponse = await fetchSheetResponseQR(tq);
+  const { cols, rows } = gvizResponse.table;
+
+  const headers = cols.map(col =>
+    (col.label && col.label.trim()) ? col.label.trim() : col.id
+  );
+
+  return rows
+    .filter(row => row && row.c && row.c.some(cell => cell && cell.v != null))
+    .map(row => {
+      const entry = {};
+      headers.forEach((header, index) => {
+        const cell = row.c[index];
+        entry[header] = (cell && cell.v != null) ? cell.v : '';
+      });
+      return entry;
+    });
+}
+
+/**  For Plant List , PlantPage
+ * Load Plant_ID, LatinName, Name_Variety, Name_HU, Name_EN
+ * for all rows where Active_in_NFC = "Y".
+ * Minimal traffic: only 5 columns, only active rows.
+ *
+ * @returns {Object[]} Array of plant objects with the selected fields.
+ */
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Use the page-level i18n helper if available, otherwise return the key. */
+function msg(key) {
+  return t('nfcgen.' + key);
+}
+
+/** Placeholder text in either language – used to detect "no real data yet" */
+const NFC_PLACEHOLDER_KEYS = ['ph_nfc_preview', 'ph_link_preview'];
+function isPlaceholder(text) {
+  return !text || NFC_PLACEHOLDER_KEYS.some(k => {
+    return ['en','hu'].some(lang => {
+      const translations = TRANSLATIONS[lang];
+      return translations && translations['nfcgen.' + k] === text;
+    });
+  }) || text === 'NFC data will appear here...' || text === 'NFC data will appear here…';
+}
+
+let plantData = [];
+let selectedPlantIndex = null;
+let selectedVarietyData = null;
+let customVarietyMode = false;
+let plantId = 1;
+let nfcIdValue =0;
+let gpsPacket =null;
+let updateNFCPreviewFn = null;
+const nfcIdInput = document.getElementById("gen-nfcId");
+const gpsStartBtn = document.getElementById('gen-gpsStartBtn');
+const gpsStopBtn = document.getElementById('gen-gpsStopBtn');
+const liveDot = document.getElementById('gen-liveDot');
+const gpsDispLat = document.getElementById('gen-gpsDispLat');
+const gpsDispLon = document.getElementById('gen-gpsDispLon');
+const gpsDispAlt = document.getElementById('gen-gpsDispAlt');
+const gpsDispAcc = document.getElementById('gen-gpsDispAcc');
+const updateTimer = document.getElementById('gen-updateTimer');
+const posPacketOut = document.getElementById('gen-posPacketOut');
+const posPacketSize = document.getElementById('gen-posPacketSize');                
+const gpsStatus = document.getElementById('gen-gpsStatus');
+const gpsCardToggle = document.getElementById('gen-gps_card_toggle');
+const gpsCardBody = document.getElementById('gen-gps_card_body');
+const othCardToggle = document.getElementById('gen-oth_card_toggle');
+const othCardBody = document.getElementById('gen-oth_card_body');
+const serialNumText = document.getElementById("gen-serialNr");
+//gps
+        let currentData = { lat: 0, lon: 0, alt: 0 , acc: 0 };
+        let lastUpdateTime = Date.now();
+        let timerInterval;
+        let watchId = null;
+
+        function setStatus(msg_text, color, statusItem) {
+            const s = statusItem;
+            s.textContent = msg_text;
+            s.style.background = color;
+            s.style.color = "white";
+        }
+/**
+ * Fetches the last value from column A of the NFC list sheet via the
+ * Apps Script Web App and pre-fills the NFC ID input.
+ */
+async function loadLastNfcId(nfcIdInput, onLoaded) {
+  if (SHEET_WRITER_URL === 'YOUR_APPS_SCRIPT_WEB_APP_URL') return;
+  try {
+    const response = await fetch(SHEET_WRITER_URL, { redirect: 'follow' });
+    const result   = await response.json();
+    if (result.lastId !== undefined && result.lastId !== '') {
+        const nextId = Number(result.lastId) + 1;
+        nfcIdInput.value = nextId;
+        nfcIdValue = nextId;
+        if (nextId > 0 && typeof onLoaded === 'function') onLoaded();
+    }
+  } catch (err) {
+    console.warn('Could not load last NFC ID:', err.message);
+  }
+}
+
+/**
+ * Attaches a live-search filter to a <select> element using a paired search
+ * input (identified by `searchInputId`).  The full option list is snapshotted
+ * whenever `refresh()` is called, and the select is rebuilt on every keystroke
+ * so the native browser dropdown only shows matching entries.
+ *
+ * @param {HTMLSelectElement} selectEl   The <select> to make searchable.
+ * @param {string}            searchId   The id of the companion <input> search field.
+ * @returns {{ refresh: Function }}      Call refresh() after repopulating the select.
+ */
+function makeSelectSearchable(selectEl, searchId) {
+  const searchInput = document.getElementById(searchId);
+  if (!searchInput) return { refresh: () => {} };
+
+  let allOptions = [];
+
+  function snapshot() {
+    allOptions = Array.from(selectEl.options).map(o => ({
+      value: o.value,
+      text:  o.textContent,
+      selected: o.selected,
+    }));
+  }
+
+  function applyFilter() {
+    const query = searchInput.value.trim().toLowerCase();
+    const currentValue = selectEl.value;
+
+    // Rebuild options: always keep the first (placeholder) option
+    selectEl.innerHTML = '';
+    allOptions.forEach(o => {
+      if (o.value === '' || !query || o.text.toLowerCase().includes(query)) {
+        const opt = document.createElement('option');
+        opt.value = o.value;
+        opt.textContent = o.text;
+        selectEl.appendChild(opt);
+      }
+    });
+
+    // Restore previous selection when it is still visible
+    if (currentValue && Array.from(selectEl.options).some(o => o.value === currentValue)) {
+      selectEl.value = currentValue;
+    }
+  }
+
+  searchInput.addEventListener('input', applyFilter);
+
+  // Clear search field when user makes a selection
+  selectEl.addEventListener('change', () => {
+    searchInput.value = '';
+    // Re-snapshot so allOptions reflects current set (important for variety select)
+    snapshot();
+    applyFilter();
+  });
+
+  return {
+    refresh() {
+      snapshot();
+      searchInput.value = '';
+      applyFilter();
+    },
+  };
+}
+
+async function populate() {
+  const selector = document.getElementById("gen-plant-selector");
+  const plantIdInput = document.getElementById("gen-plantId");
+  const datumInput = document.getElementById("gen-datum");
+  let plantNameInput = "";
+  const nameVarietySelector = document.getElementById("gen-name-variety");
+  const nameVarietyCustomInput = document.getElementById("gen-name-variety-custom");
+  const latinNameInput = document.getElementById("gen-latin-name");
+  const nfcTypInput = document.getElementById("gen-nfcTyp");
+  const egyebInput = document.getElementById("gen-egyeb");
+  const nfcPreview = document.getElementById("gen-nfc-preview");
+  const nfcSize = document.getElementById("gen-nfc-size");
+
+  // Use language-aware name property
+  const currentLang = getCurrentLang();
+  const nameProp = currentLang === 'en' ? 'Name_EN' : 'Name_HU';
+  const linkPreview = document.getElementById("gen-link-preview");
+  const linkSize = document.getElementById("gen-link-size");
+  const totalSize = document.getElementById("gen-total-size");
+  const gennfcBtn = document.getElementById("gen-generate-nfc");
+  const qrnfcBtn = document.getElementById("gen-qr-button");
+  const copynfcBtn = document.getElementById("gen-copy-nfc");
+  const copylinkBtn = document.getElementById("gen-copy-link");
+  const backBtn = document.getElementById("gen-back-button");
+  const saveNfcBtn = document.getElementById("gen-save-nfc");
+  const listNfcBtn = document.getElementById("gen-list-nfc");
+  const readNfcBtn = document.getElementById("gen-read-nfc");
+  const errorMsg = document.getElementById("gen-error-message");
+  const nfcWriteBtn = document.getElementById("gen-nfc-write-button");
+  
+  let plants = [];
+  const plantSearch = makeSelectSearchable(selector, 'gen-plant-selector-search');
+  const varietySearch = makeSelectSearchable(nameVarietySelector, 'gen-name-variety-search');
+
+  try {
+    plants = await loadActiveNFCPlants();
+    // Keep only plants active on the page and in NFC
+    //plants = plants.filter(p => p.Active_in_page === 'Y' && p.Active_in_NFC === 'Y');
+    plantData = plants;
+    console.log("Plants loaded:", plants.length, "plants");
+    selector.innerHTML = `<option value="">${msg('opt_variety')}</option>`;
+    const uniqueNames = [...new Set(plants.map(p => p[nameProp]).filter(Boolean))].sort((a, b) =>
+      a.localeCompare(b)
+    );
+    uniqueNames.forEach((name) => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      selector.appendChild(opt);
+    });
+    plantSearch.refresh();
+  } catch (err) {
+    console.error(err);
+    showError(errorMsg, msg('err_plant_load'));
+    selector.innerHTML = '<option value="">(error)</option>';
+    return;
+  }
+  loadLastNfcId(nfcIdInput, () => updateNFCPreview());
+  // Set current date
+  const today = new Date();
+  const dateString = today.toISOString().split('T')[0]; // YYYY-MM-DD format
+  datumInput.value = dateString;
+
+  // Plant selector change event
+  selector.addEventListener("change", () => {
+    const nameValue = selector.value;
+    console.log("Plant selected, value:", nameValue);
+    
+    if (nameValue === "") {
+      clearForm();
+      selectedPlantIndex = null;
+      selectedVarietyData = null;
+      customVarietyMode = false;
+      nameVarietyCustomInput.style.display = "none";
+      return;
+    }
+    
+    // Find the Species plant for this name, or fall back to the first match
+    const speciesPlant = plants.find(p => p[nameProp] === nameValue && (p.Name_Variety || "").trim() === "Species");
+    const plant = speciesPlant || plants.find(p => p[nameProp] === nameValue);
+    
+    console.log("Selected plant:", plant);
+    
+    if (plant) {
+      selectedPlantIndex = plants.indexOf(plant);
+      // Fill form fields
+      plantIdInput.value = plant.Plant_ID || "";
+      plantNameInput = plant[nameProp] || "";
+      latinNameInput.value = plant.LatinName || "";
+      datumInput.value = dateString;
+      nfcTypInput.value = "n";
+      egyebInput.value = "";
+    }
+    
+    // Populate varieties dropdown based on plant name
+    populateVarieties(nameValue);
+    
+    updatePreviews();
+  });
+
+  // Populate varieties dropdown
+  function populateVarieties(plantName) {
+    nameVarietySelector.innerHTML = `<option value="">${msg('opt_variety')}</option><option value="__custom__">-- Add custom --</option>`;
+    customVarietyMode = false;
+    nameVarietyCustomInput.style.display = "none";
+    nameVarietyCustomInput.value = "";
+    
+    if (!plantName) {
+      return;
+    }
+    
+    // Find all plants with same name (language-aware)
+    const varietiesSet = new Set();
+    
+    plants.forEach((plant, idx) => {
+      if (plant[nameProp] === plantName) {
+        const variety = (plant.Name_Variety || "").trim();
+        if (variety && !varietiesSet.has(variety)) {
+          varietiesSet.add(variety);
+          const opt = document.createElement("option");
+          opt.value = idx;
+          opt.textContent = variety;
+          nameVarietySelector.appendChild(opt);
+        }
+      }
+    });
+    
+    console.log("Found varieties:", varietiesSet.size);
+
+    varietySearch.refresh();
+
+    // Default to "Species" variety when available
+    const speciesOption = Array.from(nameVarietySelector.options).find(opt => opt.textContent === "Species");
+    if (speciesOption) {
+      nameVarietySelector.value = speciesOption.value;
+      nameVarietySelector.dispatchEvent(new Event('change'));
+    }
+  }
+
+  // Variety selector change event
+  nameVarietySelector.addEventListener("change", () => {
+    const value = nameVarietySelector.value;
+    console.log("Variety selected, value:", value);
+    
+    if (value === "") {
+      // Clear variety selection
+      selectedVarietyData = null;
+      customVarietyMode = false;
+      nameVarietyCustomInput.style.display = "none";
+      nameVarietyCustomInput.value = "";
+      updatePreviews();
+      return;
+    }
+    
+    if (value === "__custom__") {
+      // Allow custom text input
+      customVarietyMode = true;
+      selectedVarietyData = null;
+      nameVarietyCustomInput.style.display = "block";
+      nameVarietyCustomInput.value = "";
+      nameVarietyCustomInput.focus();
+      updatePreviews();
+      return;
+    }
+    
+    // Load data from selected variety row
+    customVarietyMode = false;
+    nameVarietyCustomInput.style.display = "none";
+    nameVarietyCustomInput.value = "";
+    
+    const varietyIndex = parseInt(value);
+    const varietyPlant = plants[varietyIndex];
+    
+    console.log("Selected variety plant:", varietyPlant);
+    
+    if (varietyPlant) {
+      selectedVarietyData = varietyPlant;
+      
+      // Update all fields from this variety's data
+      plantIdInput.value = varietyPlant.Plant_ID || "";
+      plantNameInput = varietyPlant[nameProp] || "";
+      latinNameInput.value = varietyPlant.LatinName || "";
+      datumInput.value = dateString;
+      nfcTypInput.value = "n";
+      egyebInput.value = "";
+      
+      updatePreviews();
+    }
+  });
+
+  // Custom variety input change event
+  nameVarietyCustomInput.addEventListener("change", updatePreviews);
+  nameVarietyCustomInput.addEventListener("input", updatePreviews);
+
+  // Input change events - update previews
+  [plantIdInput, latinNameInput, datumInput, nfcTypInput, egyebInput].forEach(input => {
+    input.addEventListener("change", updatePreviews);
+    input.addEventListener("input", updatePreviews);
+  });
+ //listener for nfcID change
+    [nfcIdInput].forEach(input => {
+    input.addEventListener("change", updatePreviews);
+    input.addEventListener("input", updatePreviews);
+  });      
+  //gps
+
+        function packBase64(lat, lon, alt, acc) {
+            const latInt = Math.round((lat + 90) * 1000000); 
+            const lonInt = Math.round((lon + 180) * 1000000);
+            const altInt = Math.round(alt + 1000);
+            const accInt = Math.round(acc + 1000);
+
+            const buffer = new ArrayBuffer(12);
+            const view = new DataView(buffer);
+            view.setUint32(0, latInt); 
+            view.setUint32(4, lonInt); 
+            view.setUint16(8, altInt);
+            view.setUint16(10, accInt); 
+
+            const bytes = new Uint8Array(buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+            return btoa(binary);
+        }
+//gps
+        function unpackBase64(b64) {
+            try {
+                const binary = atob(b64);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                const view = new DataView(bytes.buffer);
+                return {
+                    lat: (view.getUint32(0) / 1000000 - 90).toFixed(6),
+                    lon: (view.getUint32(4) / 1000000 - 180).toFixed(6),
+                    alt: view.getUint16(8) - 1000,
+                    acc: view.getUint16(10) - 1000
+                };
+            } catch (e) { return null; }
+        }
+//gps
+        function startLiveCapture() {
+           console.log("Start capture");
+            if (watchId) navigator.geolocation.clearWatch(watchId);
+            
+            gpsStartBtn.style.display = "none";
+            gpsStopBtn.style.display = "block";
+            liveDot.style.display = "inline";
+            setStatus(msg('gps_standby').replace('Standing by','Fetching GPS satellites…'), "orange",gpsStatus);
+
+            const options = { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 };
+
+            watchId = navigator.geolocation.watchPosition((pos) => {
+                lastUpdateTime = Date.now();
+                currentData.lat = pos.coords.latitude;
+                currentData.lon = pos.coords.longitude;
+                currentData.alt = pos.coords.altitude || 0;
+                currentData.acc = pos.coords.accuracy;
+
+                gpsDispLat.textContent = currentData.lat.toFixed(6);
+                gpsDispLon.textContent = currentData.lon.toFixed(6);
+                gpsDispAlt.textContent = Math.round(currentData.alt) + "m";
+                gpsDispAcc.textContent = Math.round(currentData.acc) + "m";
+
+                setStatus(`Updating… (${Math.round(currentData.acc)}m accuracy)`, "#0056b3",gpsStatus);
+
+            }, (err) => setStatus("GPS Error: " + err.message, "red",gpsStatus), options);
+
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                const seconds = Math.floor((Date.now() - lastUpdateTime) / 1000);
+                updateTimer.textContent = `Last improvement: ${seconds}s ago`;
+            }, 1000);
+        }
+
+        function stopLiveCapture() {
+            console.log("Stop");
+            if (watchId) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+
+                //calculation
+                const b64 = packBase64(currentData.lat, currentData.lon, currentData.alt, currentData.acc);
+                const gpstext = `L|${b64}|L`;
+                posPacketOut.textContent = gpstext;
+                posPacketSize.textContent = `${b64.length} B`;
+                
+            gpsStartBtn.style.display = "block";
+            gpsStartBtn.textContent = msg('btn_gps_start');
+            gpsStopBtn.style.display = "none";
+            liveDot.style.display = "none";
+            updateTimer.textContent = "Status: Data Locked";
+ 
+            setStatus("Tracking Stopped. Data preserved.", "#333",gpsStatus);
+            gpsPacket=gpstext;
+            updatePreviews();
+        }
+ 
+  function updatePreviews() {
+    //update NFC field
+    updateNFCPreview();
+  }
+
+  function getVarietyText() {
+    if (customVarietyMode && nameVarietyCustomInput.value) {
+      return nameVarietyCustomInput.value;
+    } else {
+      return nameVarietySelector.options[nameVarietySelector.selectedIndex]?.text || 
+             nameVarietySelector.value;
+    }
+  }
+  function calculateSizeInBytes(text) {
+  // Calculate size in bytes (UTF-8 encoding) - returns NUMBER
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(text);
+  return bytes.length;
+   }
+
+function formatSize(sizeInBytes) {
+  // Convert bytes to appropriate unit - returns STRING
+  if (sizeInBytes < 1024) {
+    return `${sizeInBytes} B`;
+  } else if (sizeInBytes < 1024 * 1024) {
+    return `${(sizeInBytes / 1024).toFixed(2)} KB`;
+  } else {
+    return `${(sizeInBytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+ }
+
+function calculateSize(text) {
+  // Kept for backward compatibility - returns STRING
+  return formatSize(calculateSizeInBytes(text));
+}
+
+  function updateNFCPreview() {
+    const plantId = plantIdInput.value;
+    nfcIdValue = nfcIdInput.value;
+    const plantName = plantNameInput;
+    const nameVariety = getVarietyText();
+    const latinName = latinNameInput.value;
+    const datum = datumInput.value;
+    const nfcTyp = nfcTypInput.value;
+    const egyeb = egyebInput.value;
+    let link = "";
+    if (plantId) {
+      const baseUrl = window.location.origin;
+      link = `${baseUrl}/W/P.html?id=${encodeURIComponent(plantId)}`;
+      linkPreview.textContent = link;
+    }
+    
+    const nfcData = `${nfcIdValue}/${plantId}/${plantName}/${nameVariety}/${latinName}/${nfcTyp}/${datum}${gpsCardToggle.classList.contains('on') ? '/' + gpsPacket : ''}${othCardToggle.classList.contains('on') ? '/' + egyeb : ''}/`;
+    nfcPreview.textContent = nfcData;
+    
+    // Update size indicator
+    if (nfcSize) {
+      const linkSizeBytes = calculateSizeInBytes(link);
+      const nfcSizeBytes = calculateSizeInBytes(nfcData);
+      const totalSizeBytes = linkSizeBytes + nfcSizeBytes;
+      nfcSize.textContent = formatSize(nfcSizeBytes);
+      totalSize.textContent = formatSize(totalSizeBytes);
+      linkSize.textContent = formatSize(linkSizeBytes);
+    } else {
+      linkPreview.textContent = msg('ph_link_preview');
+      nfcPreview.textContent = msg('ph_nfc_preview');
+      if (linkSize) {
+        nfcSize.textContent = "0 B";
+        linkSize.textContent = "0 B";
+        totalSize.textContent = "0 B";
+      }
+    }   
+  }
+  updateNFCPreviewFn = updateNFCPreview;
+  //Gps
+  if (gpsStartBtn) {
+  gpsStartBtn.addEventListener("click", () => {
+    console.log("button pressed startLiveCapture");
+    startLiveCapture();
+
+    });}
+  if (gpsStopBtn) {
+  gpsStopBtn.addEventListener("click", stopLiveCapture);
+  }  
+  // Generate NFC button
+  if (gennfcBtn) {
+  gennfcBtn.addEventListener("click", () => {
+    loadLastNfcId(nfcIdInput);
+    updatePreviews();
+    const nfcData = nfcPreview.textContent;
+    
+    if (selectedPlantIndex == null) {
+      showError(errorMsg, msg('err_no_plant'));
+      return;
+    }
+  });}
+
+    // Generate QR NFC button
+  if (qrnfcBtn) {
+  qrnfcBtn.addEventListener("click", () => {
+    updatePreviews();
+    const nfcData = nfcPreview.textContent;
+    const link = linkPreview.textContent;
+    const combined = nfcData + " " + link;
+    if (selectedPlantIndex == null) {
+      showError(errorMsg, msg('err_no_plant'));
+      return;
+    }
+    
+    const encodedData = encodeURIComponent(combined);
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodedData}`;
+    
+    const win = window.open(qrCodeUrl, "_blank");
+    if (!win) {
+      showError(errorMsg, msg('err_qr_fail'));
+    } else {
+      showError(errorMsg, msg('err_qr_ok'), "success");
+    }
+  });}
+
+  // Copy NFC Data button
+  if (copynfcBtn) {
+  copynfcBtn.addEventListener("click", () => {
+    const nfcData = nfcPreview.textContent;
+    
+    if (isPlaceholder(nfcData)) {
+      showError(errorMsg, msg('err_no_nfc'));
+      return;
+    }
+    
+    navigator.clipboard.writeText(nfcData).then(() => {
+      showError(errorMsg, msg('err_copy_nfc_ok'), "success");
+    }).catch(err => {
+      showError(errorMsg, msg('err_copy_fail') + err.message);
+    });
+  });}
+
+  // Copy Link button
+  if (copylinkBtn) {
+  copylinkBtn.addEventListener("click", () => {
+    const link = linkPreview.textContent;
+    
+    if (isPlaceholder(link) || !link) {
+      showError(errorMsg, msg('err_no_link'));
+      return;
+    }
+    
+    navigator.clipboard.writeText(link).then(() => {
+      showError(errorMsg, msg('err_copy_link_ok'), "success");
+    }).catch(err => {
+      showError(errorMsg, msg('err_copy_fail') + err.message);
+    });
+  });}
+
+  // Back button
+  if (backBtn) {
+  backBtn.addEventListener("click", () => {
+    window.location.href = "Homepage.html";
+  });}
+
+  // List NFC button
+  if (listNfcBtn) {
+  listNfcBtn.addEventListener("click", () => {
+    window.location.href = "NFCListPage.html";
+  });}
+
+  // Read NFC button
+  if (readNfcBtn) {
+  readNfcBtn.addEventListener("click", () => {
+    window.location.href = "Nfcreader.html";
+  });}
+  
+  // Save NFC button – appends a row to the nfc_list sheet via the Apps Script Web App
+  if (saveNfcBtn) {
+  saveNfcBtn.addEventListener("click", async () => {
+    updatePreviews();
+    const today = new Date();
+    const dateString = today.toISOString().split('T')[0]; // YYYY-MM-DD format
+    
+    const nfcId      = nfcIdInput.value;
+    const plantIdValue    = plantIdInput.value;
+    const nfcData    = nfcPreview.textContent;
+    const nfcTyp     = nfcTypInput.value;
+    const datum      = datumInput.value;
+    const nfcCreated = dateString;
+    const nfcPos     = posPacketOut.textContent;
+    const link       = linkPreview.textContent;
+    const egyeb      = egyebInput.value;
+    const serialNum  = serialNumText.value; 
+    
+    if (selectedPlantIndex == null) {
+      showError(errorMsg, msg('err_no_save'));
+      return;
+    }
+
+    if (SHEET_WRITER_URL === 'YOUR_APPS_SCRIPT_WEB_APP_URL') {
+      showError(errorMsg, msg('err_no_config'));
+      return;
+    }
+
+    saveNfcBtn.disabled = true;
+    try {
+      const response = await fetch(SHEET_WRITER_URL, {
+        method: 'POST',
+        // Apps Script Web Apps accept text/plain without a CORS preflight.
+        // The body is still valid JSON, parsed by the Apps Script handler.
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ key: SHEET_WRITER_SECRET, nfcId, plantId: plantIdValue, nfcTyp, datum, nfcCreated, nfcPos, nfcData, link, other: egyeb,serialNum }),
+        redirect: 'follow',
+      });
+      const result = await response.json().catch(() => ({}));
+      if (result.status === 'success') {
+        showError(errorMsg, msg('err_save_ok'), "success");
+      } else {
+        showError(errorMsg, msg('err_save_fail') + (result.error || "Unknown error"));
+      }
+    } catch (err) {
+      showError(errorMsg, msg('err_save_fail') + err.message);
+    } finally {
+      loadLastNfcId(nfcIdInput);
+      saveNfcBtn.disabled = false;
+      updatePreviews();
+    }
+  });}
+
+  //save end
+
+  // NFC Write button – writes nfc-preview (text) and link-preview (url) to a physical NFC tag
+  if (nfcWriteBtn) {
+  nfcWriteBtn.addEventListener("click", async () => {
+    updatePreviews();
+    const nfcData = nfcPreview.textContent;
+    const link    = linkPreview.textContent;
+
+    if (selectedPlantIndex == null) {
+      showError(errorMsg, msg('err_no_save'));
+      return;
+    }
+
+    if (!('NDEFReader' in window)) {
+      showError(errorMsg, msg('err_nfc_ns'));
+      return;
+    }
+
+    nfcWriteBtn.disabled = true;
+    showError(errorMsg, msg('err_nfc_tap'), "info");
+
+    try {
+      const ndef = new NDEFReader();
+      await ndef.scan();
+      ndef.addEventListener("reading", (event) => {
+        serialNumText.value = event.serialNumber;
+        console.log("Tag UID:", event.serialNumber);
+      });
+      await ndef.write({
+        records: [
+          { recordType: "text", data: nfcData },
+          { recordType: "url",  data: link }
+        ]
+      });
+      showError(errorMsg, msg('err_nfc_ok'), "success");
+    } catch (error) {
+      showError(errorMsg, msg('err_nfc_write') + error);
+      console.error(error);
+    } finally {
+        nfcWriteBtn.disabled = false;
+    } 
+  });}//end
+
+  function clearForm() {
+    plantIdInput.value = "";
+    nfcIdInput.value = "";
+    plantNameInput = "";
+    nameVarietySelector.innerHTML = `<option value="">${msg('opt_variety')}</option>`;
+    nameVarietyCustomInput.value = "";
+    nameVarietyCustomInput.style.display = "none";
+    latinNameInput.value = "";
+    datumInput.value = dateString;
+    nfcTypInput.value = "n";
+    egyebInput.value = "";
+    nfcPreview.textContent = msg('ph_nfc_preview');
+    nfcSize.textContent = "0 B";
+    linkPreview.textContent = msg('ph_link_preview');
+    linkSize.textContent = "0 B";
+    totalSize.textContent = "0 B";
+    serialNumText.textContent = "none";
+  }
+
+  function showError(el, message, type = "error") {
+    el.textContent = message;
+    el.className = 'status-msg ' + (type === 'success' ? 'success' : type === 'info' ? 'info' : 'error');
+    el.style.display = "block";
+    
+    if (type === "success") {
+      setTimeout(() => {
+        el.textContent = "";
+        el.className = 'status-msg';
+      }, 3000);
+    }
+  }
+
+  // Set current date on load
+  datumInput.value = dateString;
+
+  // Pre-select plant and variety from URL params (when navigating from Homepage)
+  const params = new URLSearchParams(window.location.search);
+  const paramName = params.get('name');
+  const paramplantId = params.get('plantId');
+
+  if (paramName) {
+    selector.value = paramName;
+    selector.dispatchEvent(new Event('change'));
+
+    if (paramplantId) {
+      // Find the option whose plant has the matching plantId
+      const matchOpt = Array.from(nameVarietySelector.options).find(opt => {
+        if (!opt.value || opt.value === '__custom__') return false;
+        const idx = parseInt(opt.value);
+        return String(plants[idx]?.Plant_ID) === paramplantId;
+      });
+      if (matchOpt) {
+        nameVarietySelector.value = matchOpt.value;
+        nameVarietySelector.dispatchEvent(new Event('change'));
+      }
+    }
+  }
+}// end pop
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", populate);
+} else {
+  populate();
+}
+if (gpsCardToggle) {
+gpsCardToggle.addEventListener('click', () => {
+  gpsCardToggle.classList.toggle('on');
+  const isOn = gpsCardToggle.classList.contains('on');
+  gpsCardBody.style.display = isOn ? 'block' : 'none';
+  // Auto-open the GPS panel when turning on
+  const gpsPanel = document.getElementById('gen-panel-gps');
+  if (isOn && gpsPanel && !gpsPanel.classList.contains('open')) {
+    gpsPanel.classList.add('open');
+  }
+  if (updateNFCPreviewFn) updateNFCPreviewFn();
+});}
+if (othCardToggle) {
+othCardToggle.addEventListener('click', () => {
+  othCardToggle.classList.toggle('on');
+  const isOn = othCardToggle.classList.contains('on');
+  othCardBody.style.display = isOn ? 'block' : 'none';
+  // Auto-open the Other panel when turning on
+  const othPanel = document.getElementById('gen-panel-other');
+  if (isOn && othPanel && !othPanel.classList.contains('open')) {
+    othPanel.classList.add('open');
+  }
+});}
+
+})();
+  </script>
+
+  <!-- Script 4: Reader logic IIFE -->
+  <script>
+(function() {
+
+// ── Google Apps Script Web App configuration ─────────────────────────────────
+// Deploy scripts/sheetwriter.js as a Google Apps Script Web App and paste the
+// resulting URL below.  Also set the same SECRET_KEY in Script Properties.
+// See scripts/sheetwriter.js for full deployment instructions.
+//
+// Security note: SHEET_WRITER_SECRET is visible in page source.  It provides
+// write-only authorization (no data can be read via this key) and is combined
+// with rate limiting and input validation in the Apps Script to prevent abuse.
+// Keep the SECRET_KEY long and random; treat the Web App URL as semi-private.
+const SHEET_WRITER_URL    = 'https://script.google.com/macros/s/AKfycbysWB68AM6TKlobnA3MLR_18LpJjGVkHolPf3G_WNziV3r93_fztJIenTVSoll-Kmtp/exec';
+const SHEET_WRITER_SECRET = '159753g9d5rt4Ht4eg7e5z4d6szo89fsef';
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Use the page-level i18n helper if available, otherwise return the key. */
+function msg(key) {
+  return t('nfcread.' + key);
+}
+
+/** Placeholder text in either language – used to detect "no real data yet" */
+const NFC_PLACEHOLDER_KEYS = ['ph_nfc_preview', 'ph_link_preview'];
+function isPlaceholder(text) {
+  return !text || NFC_PLACEHOLDER_KEYS.some(k => {
+    return ['en','hu'].some(lang => {
+      const translations = TRANSLATIONS[lang];
+      return translations && translations['nfcread.' + k] === text;
+    });
+  }) || text === 'NFC data will appear here...' || text === 'NFC data will appear here…';
+}
+
+let plantData = [];
+let selectedPlantIndex = null;
+let selectedVarietyData = null;
+let customVarietyMode = false;
+let plantId = 1;
+let nfcIdValue =0;
+let gpsPacket =null;
+let updateNFCPreviewFn = null;
+
+const nfcIdInput = document.getElementById("read-nfcId");
+const plantIdInput = document.getElementById("read-plantId");
+const datumInput = document.getElementById("read-datum");
+const plantNameInput = document.getElementById("read-name-plant");
+const nameVarietyInput = document.getElementById("read-name-variety");
+const latinNameInput = document.getElementById("read-latin-name");
+const nfcTypInput = document.getElementById("read-nfcTyp");
+const egyebInput = document.getElementById("read-egyeb");
+const nfcPreview = document.getElementById("read-nfc-preview");
+const linkPreview = document.getElementById("read-link-preview");
+
+  const readNfcBtn = document.getElementById("read-read-nfc");
+  const openLinkBtn = document.getElementById("read-open-link-button");
+const clearBtn = document.getElementById("read-clear-button");
+  const copyNfcBtn = document.getElementById("read-copy-nfc");
+const genNfcBtn = document.getElementById("read-gen-nfc");
+const listNfcBtn = document.getElementById("read-list-nfc");
+  const copyLinkBtn = document.getElementById("read-copy-link");
+  const backBtn = document.getElementById("read-back-button");
+  const saveNfcBtn = document.getElementById("read-save-nfc");
+  const errorMsg = document.getElementById("read-error-message");
+
+const gpsDispLat = document.getElementById('read-gpsDispLat');
+const gpsDispLon = document.getElementById('read-gpsDispLon');
+const gpsDispAlt = document.getElementById('read-gpsDispAlt');
+const gpsDispAcc = document.getElementById('read-gpsDispAcc');
+const posPacketSize = document.getElementById('read-posPacketSize');
+const posPacketOut = document.getElementById('read-posPacketOut');
+const nfcSize = document.getElementById("read-nfc-size");
+const linkSize = document.getElementById("read-link-size");
+const totalSize = document.getElementById("read-total-size");
+
+const serialNumText = document.getElementById("read-serialNr");
+
+const gpsCardBody = document.getElementById('read-gps_card_body');
+const othCardBody = document.getElementById('read-oth_card_body');
+const NFC_TYP_LIST= { n: 'n – plant', o: 'o – graft', m: 'm – seed'};
+//gps
+        let currentData = { lat: 0, lon: 0, alt: 0 };
+        let lastUpdateTime = Date.now();
+        let timerInterval;
+        let watchId = null;
+
+  function setStatus(msg_text, color) {
+            const s = gpsStatus;
+            s.textContent = msg_text;
+            s.style.background = color;
+            s.style.color = "white";
+        }
+/* Fetches the last value from column A of the NFC list sheet via the
+ * Apps Script Web App and pre-fills the NFC ID input.
+ */
+async function loadLastNfcId(nfcIdInput, onLoaded) {
+  if (SHEET_WRITER_URL === 'YOUR_APPS_SCRIPT_WEB_APP_URL') return;
+  try {
+    const response = await fetch(SHEET_WRITER_URL, { redirect: 'follow' });
+    const result   = await response.json();
+    if (result.lastId !== undefined && result.lastId !== '') {
+        const nextId = Number(result.lastId) + 1;
+        nfcIdInput.value = nextId;
+        nfcIdValue = nextId;
+        if (nextId > 0 && typeof onLoaded === 'function') onLoaded();
+    }
+  } catch (err) {
+    console.warn('Could not load last NFC ID:', err.message);
+  }
+}
+
+
+
+function showError(el, message, type = "error") {
+  el.textContent = message;
+  el.className = 'status-msg ' + (type === 'success' ? 'success' : type === 'info' ? 'info' : 'error');
+  el.style.display = "block";
+
+  if (type === "success") {
+    setTimeout(() => {
+      el.textContent = "";
+      el.className = 'status-msg';
+    }, 3000);
+  }
+}
+
+async function readNfc(onRead) {
+  if (!('NDEFReader' in window)) {
+      showError(errorMsg, msg('err_nfc_ns'));
+      return;
+    } else {
+     readNfcBtn.disabled = true;
+      showError(errorMsg, msg('err_nfc_tap'), "info");
+  }
+  
+  try {
+ // console.log("NFC read "+ id);
+    const ndef = new NDEFReader();
+    await ndef.scan();
+
+       ndef.onreading = (event) => {
+         const result = {
+           id: event.serialNumber,
+           records: []
+         };
+
+         for (const record of event.message.records) {
+           let value = "";
+
+           switch (record.recordType) {
+             case "text":
+               value = new TextDecoder(record.encoding).decode(record.data);
+               break;
+
+             case "url":
+               value = new TextDecoder().decode(record.data);
+               break;
+     
+             case "mime":
+               value = new TextDecoder().decode(record.data);
+               break;
+
+             default:
+               value = new TextDecoder().decode(record.data);
+           }
+
+           result.records.push({
+             type: record.recordType,
+             value
+           });
+         }
+
+         onRead(result);
+      }; //end on reading
+    showError(errorMsg, msg('err_nfc_scan_ok'), "info");
+    } catch (error) {
+      showError(errorMsg, msg('err_nfc_read') + error);
+      console.error(error);
+    } finally {
+        readNfcBtn.disabled = false;
+    } 
+} //end readNfc
+
+async function populate() {
+
+  // Use language-aware name property
+  const currentLang = getCurrentLang();
+  const nameProp = currentLang === 'en' ? 'Name_EN' : 'Name_HU';
+
+  let plants = [];
+  let lastId = null;
+  
+  function decodeToMap(str, keys) {
+     const packets = [];
+     let index = 0;
+     // 1. protect packets (NO leading/trailing / required)
+     const protectedStr = str.replace(/L\|([\s\S]*?)\|L/g, (_, content) => {
+       packets.push(content);
+       return `__PKT_${index++}__`;
+     });
+     // 2. split normally
+     const parts = protectedStr.split("/");
+     // 3. restore packets
+     const values = parts.map(p => {
+       const match = p.match(/^__PKT_(\d+)__$/);
+       return match ? packets[match[1]] : p;
+     });
+     // 4. map to keys
+     return Object.fromEntries(
+       keys.map((k, i) => [k, { value: values[i] ?? "" }])
+     );
+   }//end decodeToMap
+ 
+//unpackBase64
+  function unpackBase64(b64) {
+            try {
+                const binary = atob(b64);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                const view = new DataView(bytes.buffer);
+                return {
+                    lat: (view.getUint32(0) / 1000000 - 90).toFixed(6),
+                    lon: (view.getUint32(4) / 1000000 - 180).toFixed(6),
+                    alt: view.getUint16(8) - 1000,
+                    acc: view.getUint16(10) - 1000
+                };
+            } catch (e) { return null; }
+        } // end unpackBase64
+  
+  function calculateSizeInBytes(text) {
+  // Calculate size in bytes (UTF-8 encoding) - returns NUMBER
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(text);
+  return bytes.length;
+   }
+
+function formatSize(sizeInBytes) {
+  // Convert bytes to appropriate unit - returns STRING
+  if (sizeInBytes < 1024) {
+    return `${sizeInBytes} B`;
+  } else if (sizeInBytes < 1024 * 1024) {
+    return `${(sizeInBytes / 1024).toFixed(2)} KB`;
+  } else {
+    return `${(sizeInBytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+ }
+
+function calculateSize(text) {
+  // Kept for backward compatibility - returns STRING
+  return formatSize(calculateSizeInBytes(text));
+}
+  
+      // data
+function handlePlantData(data) {
+    const plant = {};
+    let text = "";
+    let link = "";
+    clearForm();
+    console.log("New tag detected:", data.id); 
+    serialNumText.value = data.id;
+    data.records.forEach(r => {
+      if (r.type === "text") { text = r.value; console.log("Text: ", r.value);}
+      if (r.type === "url") { link = r.value; console.log("URL: ", r.value);} 
+     });
+    
+    nfcPreview.textContent = text;
+    linkPreview.textContent= link;
+    /* 5/1/Alma/Species/Malus domestica/n/2026-04-09/L|BV1KgAq6lQAD6A==|L/oth  */
+    const keys = ["ncfId","plantId","name","variety","latinName","nfcType","datum","pos","other"];
+    let decodedNfc = decodeToMap(text, keys);
+    console.log(decodedNfc);;
+
+    nfcIdInput.value= decodedNfc.ncfId.value;
+    plantIdInput.value= decodedNfc.plantId.value;
+    latinNameInput.value= decodedNfc.latinName.value;
+    plantNameInput.value = decodedNfc.name.value;
+    nameVarietyInput.value = decodedNfc.variety.value;
+    nfcTypInput.value= decodedNfc.nfcType.value;
+    datumInput.value= decodedNfc.datum.value;
+    posPacketOut.textContent= decodedNfc.pos.value;
+    //nfcCreated.value = "";
+    egyebInput.value= decodedNfc.other.value;
+  
+    const  pos = decodedNfc.pos.value;
+    if (pos) {
+       const posSizeBytes = calculateSizeInBytes(pos);
+       posPacketSize.textContent = formatSize(posSizeBytes);
+
+       const gpsData = unpackBase64(pos);
+       if (gpsData) {
+                        gpsDispLat.innerText = gpsData.lat;
+                        gpsDispLon.innerText = gpsData.lon;
+                        gpsDispAlt.innerText = gpsData.alt + "m";
+                        gpsDispAcc.innerText = gpsData.acc + "m";
+           }
+      }
+    //size
+    if (link || text) {
+       const linkSizeBytes = calculateSizeInBytes(link);
+       const nfcSizeBytes = calculateSizeInBytes(text);
+       nfcSize.textContent = formatSize(nfcSizeBytes);
+       linkSize.textContent = formatSize(linkSizeBytes);
+       totalSize.textContent = formatSize(nfcSizeBytes + linkSizeBytes);
+    }
+    
+}     //end
+
+  //read
+  function nfcReadFunc() {
+     readNfc((data) => {
+       if (data.id === lastId) return; // prevent spam
+       lastId = data.id;
+       console.log("New tag detected:", data);
+       // update UI
+       handlePlantData(data);
+   });
+  } 
+
+  nfcReadFunc();
+  
+
+//nfc reading decoding
+//const input = "5/1/Alma/Species/Malus domestica/n/2026-04-09/L|BV1KgAq6lQAD6A==|L/oth";
+
+  // Copy NFC Data button
+   if (copyNfcBtn) {
+  copyNfcBtn.addEventListener("click", () => {
+    const nfcData = nfcPreview.textContent;
+    
+    if (isPlaceholder(nfcData)) {
+      showError(errorMsg, msg('err_no_nfc'));
+      return;
+    }
+    
+    navigator.clipboard.writeText(nfcData).then(() => {
+      showError(errorMsg, msg('err_copy_nfc_ok'), "success");
+    }).catch(err => {
+      showError(errorMsg, msg('err_copy_fail') + err.message);
+    });
+  });}
+
+  // Copy Link button
+  if (copyLinkBtn) {
+  copyLinkBtn.addEventListener("click", () => {
+    const link = linkPreview.textContent;
+    
+    if (isPlaceholder(link) || !link) {
+      showError(errorMsg, msg('err_no_link'));
+      return;
+    }
+    
+    navigator.clipboard.writeText(link).then(() => {
+      showError(errorMsg, msg('err_copy_link_ok'), "success");
+    }).catch(err => {
+      showError(errorMsg, msg('err_copy_fail') + err.message);
+    });
+  });}
+ 
+  // NFC Read button
+  if (readNfcBtn) {
+  readNfcBtn.addEventListener("click", () => {
+     nfcReadFunc();
+  });}
+ 
+  // Back button
+  if (backBtn) {
+  backBtn.addEventListener("click", () => {
+    window.location.href = "Homepage.html";
+  });}
+
+  // Gen NFC button
+  if (genNfcBtn) {
+  genNfcBtn.addEventListener("click", () => {
+    window.location.href = "Nfcgenerator.html";
+  });}
+
+  // List NFC button
+  if (listNfcBtn) {
+  listNfcBtn.addEventListener("click", () => {
+    window.location.href = "NFCListPage.html";
+  });}
+  
+  // Save NFC button – appends a row to the nfc_list sheet via the Apps Script Web App
+  /*if (saveNfcBtn) {
+  saveNfcBtn.addEventListener("click", async () => {
+    const today = new Date();
+    const dateString = today.toISOString().split('T')[0]; // YYYY-MM-DD format
+    
+    const nfcId      = nfcIdInput.value;
+    const plantIdValue    = plantIdInput.value;
+    const nfcData    = nfcPreview.textContent;
+    const nfcTyp     = nfcTypInput.value;
+    const datum      = datumInput.value;
+    const nfcCreated = dateString;
+    const nfcPos     = posPacketOut.textContent;
+    const link       = linkPreview.textContent;
+    const egyeb      = egyebInput.value;
+    const serialNum      = serialNumText.value;
+
+    if (selectedPlantIndex == null) {
+      showError(errorMsg, msg('err_no_save'));
+      return;
+    }
+
+    if (SHEET_WRITER_URL === 'YOUR_APPS_SCRIPT_WEB_APP_URL') {
+      showError(errorMsg, msg('err_no_config'));
+      return;
+    }
+
+    saveNfcBtn.disabled = true;
+    try {
+      const response = await fetch(SHEET_WRITER_URL, {
+        method: 'POST',
+        // Apps Script Web Apps accept text/plain without a CORS preflight.
+        // The body is still valid JSON, parsed by the Apps Script handler.
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ key: SHEET_WRITER_SECRET, nfcId, plantId: plantIdValue, nfcTyp, datum, nfcCreated, nfcPos, nfcData, link, other: egyeb, serialNum}),
+        redirect: 'follow',
+      });
+      const result = await response.json().catch(() => ({}));
+      if (result.status === 'success') {
+        showError(errorMsg, msg('err_save_ok'), "success");
+      } else {
+        showError(errorMsg, msg('err_save_fail') + (result.error || "Unknown error"));
+      }
+    } catch (err) {
+      showError(errorMsg, msg('err_save_fail') + err.message);
+    } finally {
+      saveNfcBtn.disabled = false;
+    }
+  });}*/
+  //save end
+  //open link
+  if (openLinkBtn) {
+   openLinkBtn.addEventListener("click", () => {
+    const link = linkPreview.textContent.trim();
+    if (!link) {
+        console.warn("Link is empty");
+        return;
+    }
+    try {
+        new URL(link); // validate
+        window.location.href = link;
+      } catch {
+       console.error("Invalid URL:", link);
+    }
+});}
+  
+  // clear with button
+   if (clearBtn) {
+   clearBtn.addEventListener("click", () => {
+     clearForm();
+      });}
+  // clear all
+  function clearForm() {
+    plantIdInput.value = "";
+    nfcIdInput.value = "";
+    plantNameInput.value = "";
+    nameVarietyInput.value = "";
+    latinNameInput.value = "";
+    datumInput.value = "";
+    nfcTypInput.value = "";
+    egyebInput.value = "";
+    serialNumText.value = "";
+    nfcPreview.textContent = msg('ph_nfc_preview');
+    linkPreview.textContent = msg('ph_link_preview');
+    nfcSize.textContent = "0 B";
+    linkSize.textContent = "0 B";
+    totalSize.textContent = "0 B";
+    posPacketOut.textContent= "";
+    gpsDispLat.innerText = "";
+    gpsDispLon.innerText = "";
+    gpsDispAlt.innerText = "";
+    gpsDispAcc.innerText = "";
+    posPacketSize.textContent = "0 B";
+    //nfcCreated.value = "";
+  }
+
+
+} // end pop
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", populate);
+} else {
+  populate();
+}
+
+
+})();
+  </script>
+
+  <!-- Script 5: Shared init -->
+  <script>
+setupLanguageButtons();
+  </script>
+
+</body>
+</html>
