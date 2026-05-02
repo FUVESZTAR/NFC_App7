@@ -38,6 +38,7 @@ class PlantRepositoryImpl @Inject constructor(
 @Singleton
 class NfcRecordRepositoryImpl @Inject constructor(
     private val dao: NfcRecordDao,
+    private val sheetsDataSource: GoogleSheetsDataSource,
 ) : NfcRecordRepository {
 
     private val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
@@ -50,9 +51,18 @@ class NfcRecordRepositoryImpl @Inject constructor(
 
     override suspend fun delete(id: Long) = dao.deleteById(id)
 
-    override suspend fun syncToRemote(): Result<Unit> = Result.success(Unit) // implement with Drive
+    override suspend fun loadRemoteLastId(): Int? = sheetsDataSource.fetchLastNfcId()
 
-    override suspend fun syncFromRemote(): Result<Unit> = Result.success(Unit) // implement with Drive
+    /** POST every PENDING record to the Google Sheet and mark it SYNCED on success. */
+    override suspend fun syncToRemote(): Result<Unit> = runCatching {
+        val pending = dao.getPending()
+        pending.forEach { entity ->
+            sheetsDataSource.postNfcRecord(entity.toDomain())
+                .onSuccess { dao.updateSyncStatus(entity.id, SyncStatus.SYNCED.name) }
+        }
+    }
+
+    override suspend fun syncFromRemote(): Result<Unit> = Result.success(Unit)
 
     override suspend fun nextNfcId(): Int = (dao.maxNfcId() ?: 0) + 1
 }

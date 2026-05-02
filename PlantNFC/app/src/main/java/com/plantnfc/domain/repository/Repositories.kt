@@ -16,4 +16,6 @@ interface NfcRecordRepository {
     suspend fun syncToRemote(): Result<Unit>
     suspend fun syncFromRemote(): Result<Unit>
     suspend fun nextNfcId(): Int
+    /** Returns the last NFC ID stored in the remote Google Sheet, or null if unavailable. */
+    suspend fun loadRemoteLastId(): Int?
 }
