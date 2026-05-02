@@ -1,5 +1,9 @@
 package com.plantnfc.presentation.generator
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -15,9 +19,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.plantnfc.domain.model.NfcType
 import com.plantnfc.presentation.common.NfcBridge
+import com.plantnfc.util.NfcTextCodec
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -36,8 +42,17 @@ fun GeneratorScreen(
         state.snackbar?.let { snackbarHost.showSnackbar(it); vm.dismissSnack() }
     }
 
-    // Register NFC write result callbacks
     var nfcWaiting by remember { mutableStateOf(false) }
+
+    // Location permission launcher
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                      permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (granted) vm.startGps()
+        else scope.launch { snackbarHost.showSnackbar("Location permission required for GPS") }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHost) },
@@ -149,6 +164,127 @@ fun GeneratorScreen(
                         ExposedDropdownMenu(expanded = typeExpanded, onDismissRequest = { typeExpanded = false }) {
                             NfcType.entries.forEach { t ->
                                 DropdownMenuItem(text = { Text(t.label) }, onClick = { vm.setNfcType(t); typeExpanded = false })
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── GPS ──────────────────────────────────────────────────────────
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // Header row with On/Off switch
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.GpsFixed, contentDescription = null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("GPS Data", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                        Text(
+                            text = if (state.gpsEnabled) "On" else "Off",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Switch(
+                            checked = state.gpsEnabled,
+                            onCheckedChange = { vm.setGpsEnabled(it) },
+                        )
+                    }
+
+                    if (state.gpsEnabled) {
+                        // Start / Stop button
+                        if (!state.gpsTracking) {
+                            Button(
+                                onClick = {
+                                    val hasFine = ContextCompat.checkSelfPermission(
+                                        context, Manifest.permission.ACCESS_FINE_LOCATION
+                                    ) == PackageManager.PERMISSION_GRANTED
+                                    val hasCoarse = ContextCompat.checkSelfPermission(
+                                        context, Manifest.permission.ACCESS_COARSE_LOCATION
+                                    ) == PackageManager.PERMISSION_GRANTED
+                                    if (hasFine || hasCoarse) {
+                                        vm.startGps()
+                                    } else {
+                                        locationPermissionLauncher.launch(
+                                            arrayOf(
+                                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                                Manifest.permission.ACCESS_COARSE_LOCATION,
+                                            )
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Icon(Icons.Default.PlayArrow, null, Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Start Live Tracking")
+                            }
+                        } else {
+                            Button(
+                                onClick = { vm.stopGps() },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                ),
+                            ) {
+                                Icon(Icons.Default.Stop, null, Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Stop & Lock Data")
+                            }
+                        }
+
+                        // Live data rows
+                        listOf(
+                            "Latitude"  to (state.gpsLat?.let { "%.6f".format(it) } ?: "–"),
+                            "Longitude" to (state.gpsLon?.let { "%.6f".format(it) } ?: "–"),
+                            "Altitude"  to (state.gpsAlt?.let { "${it}m" }           ?: "–"),
+                            "Accuracy"  to (state.gpsAcc?.let { "±${it}m" }          ?: "–"),
+                        ).forEach { (label, value) ->
+                            Row(Modifier.fillMaxWidth()) {
+                                Text(
+                                    label,
+                                    Modifier.width(80.dp),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(value, style = MaterialTheme.typography.bodySmall)
+                            }
+                            HorizontalDivider(thickness = 0.5.dp)
+                        }
+
+                        // Status
+                        Text(
+                            text = state.gpsStatus,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+
+                        // Locked GPS packet
+                        if (!state.gpsPacketLocked.isNullOrBlank()) {
+                            Text(
+                                "Compressed Packet",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = state.gpsPacketLocked,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.small)
+                                        .padding(8.dp),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Surface(
+                                    shape = MaterialTheme.shapes.small,
+                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                ) {
+                                    Text(
+                                        "${NfcTextCodec.sizeBytes(state.gpsPacketLocked)} B",
+                                        Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
                             }
                         }
                     }
