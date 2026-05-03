@@ -12,6 +12,8 @@ import com.plantnfc.domain.model.NfcType
 import com.plantnfc.domain.model.Plant
 import com.plantnfc.domain.repository.NfcRecordRepository
 import com.plantnfc.domain.repository.PlantRepository
+import com.plantnfc.presentation.GpsStatus
+import com.plantnfc.presentation.SnackMsg
 import com.plantnfc.util.GpsPacketCodec
 import com.plantnfc.util.NfcTextCodec
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -36,7 +38,7 @@ data class GeneratorUiState(
     val nfcText: String = "",
     val nfcLink: String = "",
     val textBytes: Int = 0,
-    val snackbar: String? = null,
+    val snackbar: SnackMsg? = null,
     val isSaving: Boolean = false,
     // GPS
     val gpsEnabled: Boolean = false,
@@ -46,7 +48,7 @@ data class GeneratorUiState(
     val gpsAlt: Int? = null,
     val gpsAcc: Int? = null,
     val gpsPacketLocked: String? = null,
-    val gpsStatus: String = "Ready.",
+    val gpsStatus: GpsStatus = GpsStatus.Ready,
 )
 
 private fun todayStr() = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
@@ -104,8 +106,8 @@ class GeneratorViewModel @Inject constructor(
     fun setDatum(v: String) { _state.update { it.copy(datum = v) }; updatePreview() }
     fun setNfcType(v: NfcType) { _state.update { it.copy(nfcType = v) }; updatePreview() }
     fun setSerial(v: String) { _state.update { it.copy(serialNumber = v) } }
-    fun onNfcWriteSuccess() = snack("Written to NFC tag ✅")
-    fun onNfcWriteError(msg: String) = snack("Write error: $msg")
+    fun onNfcWriteSuccess() = snack(SnackMsg.NfcWriteSuccess)
+    fun onNfcWriteError(msg: String) = snack(SnackMsg.NfcWriteError(msg))
     fun dismissSnack() = _state.update { it.copy(snackbar = null) }
 
     // ── GPS ───────────────────────────────────────────────────────────────────
@@ -121,7 +123,7 @@ class GeneratorViewModel @Inject constructor(
         // Remove any previous listener
         locationListener?.let { lm.removeUpdates(it) }
 
-        _state.update { it.copy(gpsTracking = true, gpsStatus = "Fetching GPS satellites…") }
+        _state.update { it.copy(gpsTracking = true, gpsStatus = GpsStatus.Fetching) }
 
         val listener = LocationListener { loc ->
             _state.update { it.copy(
@@ -129,7 +131,7 @@ class GeneratorViewModel @Inject constructor(
                 gpsLon = loc.longitude,
                 gpsAlt = loc.altitude.toInt(),
                 gpsAcc = loc.accuracy.toInt(),
-                gpsStatus = "Updating… (±${loc.accuracy.toInt()}m)",
+                gpsStatus = GpsStatus.Updating(loc.accuracy.toInt()),
             )}
         }
         locationListener = listener
@@ -143,7 +145,7 @@ class GeneratorViewModel @Inject constructor(
                 Looper.getMainLooper(),
             )
         } catch (e: SecurityException) {
-            _state.update { it.copy(gpsStatus = "GPS permission denied", gpsTracking = false) }
+            _state.update { it.copy(gpsStatus = GpsStatus.PermissionDenied, gpsTracking = false) }
             locationListener = null
         }
     }
@@ -163,7 +165,8 @@ class GeneratorViewModel @Inject constructor(
             ))
         } else null
 
-        _state.update { it.copy(gpsTracking = false, gpsPacketLocked = packet, gpsStatus = if (packet != null) "Data Locked." else "No fix yet.") }
+        _state.update { it.copy(gpsTracking = false, gpsPacketLocked = packet,
+            gpsStatus = if (packet != null) GpsStatus.Locked else GpsStatus.NoFix) }
         updatePreview()
     }
 
@@ -177,7 +180,7 @@ class GeneratorViewModel @Inject constructor(
 
     fun saveRecord() {
         val s = _state.value
-        if (s.selectedPlant == null) { snack("Select a plant first"); return }
+        if (s.selectedPlant == null) { snack(SnackMsg.SelectPlantFirst); return }
         viewModelScope.launch {
             _state.update { it.copy(isSaving = true) }
             runCatching {
@@ -197,8 +200,8 @@ class GeneratorViewModel @Inject constructor(
                 recordRepo.syncToRemote()
                 val nextId = recordRepo.nextNfcId()
                 _state.update { it.copy(nfcId = nextId) }
-                snack("Saved!")
-            }.onFailure { snack("Save failed: ${it.message}") }
+                snack(SnackMsg.Saved)
+            }.onFailure { snack(SnackMsg.SaveFailed(it.message ?: "")) }
             _state.update { it.copy(isSaving = false) }
         }
     }
@@ -223,5 +226,5 @@ class GeneratorViewModel @Inject constructor(
         _state.update { it.copy(nfcText = text, nfcLink = link, textBytes = NfcTextCodec.sizeBytes(text)) }
     }
 
-    private fun snack(msg: String) = _state.update { it.copy(snackbar = msg) }
+    private fun snack(msg: SnackMsg) = _state.update { it.copy(snackbar = msg) }
 }
