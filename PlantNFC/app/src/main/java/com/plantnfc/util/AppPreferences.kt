@@ -28,6 +28,7 @@ class AppPreferences @Inject constructor(
         const val DEFAULT_PLANT_SHEET_NAME  = "plant_list"
         const val DEFAULT_NFC_WRITER_URL    =
             "https://script.google.com/macros/s/AKfycbysWB68AM6TKlobnA3MLR_18LpJjGVkHolPf3G_WNziV3r93_fztJIenTVSoll-Kmtp/exec"
+        // Default secret matches the deployed Apps Script; override via Settings screen in production.
         const val DEFAULT_NFC_WRITER_SECRET = "159753g9d5rt4Ht4eg7e5z4d6szo89fsef"
     }
 

@@ -86,6 +86,7 @@ data class AppStrings(
     val saveSettings: String,
     val settingsSaved: String,
     val reloadPlants: String,
+    val resetDefaults: String,
 
     // NFC type labels
     val nfcTypePlant: String,
@@ -208,6 +209,7 @@ val englishStrings = AppStrings(
     saveSettings            = "Save Settings",
     settingsSaved           = "Settings saved ✓",
     reloadPlants            = "Reload Plant List",
+    resetDefaults           = "Reset to defaults",
     nfcTypePlant            = "n – plant",
     nfcTypeGraft            = "o – graft",
     nfcTypeSeed             = "m – seed",
@@ -299,6 +301,7 @@ val hungarianStrings = AppStrings(
     saveSettings            = "Beállítások mentése",
     settingsSaved           = "Beállítások mentve ✓",
     reloadPlants            = "Növénylista újratöltése",
+    resetDefaults           = "Alapértelmezések visszaállítása",
     nfcTypePlant            = "n – növény",
     nfcTypeGraft            = "o – oltás",
     nfcTypeSeed             = "m – mag",

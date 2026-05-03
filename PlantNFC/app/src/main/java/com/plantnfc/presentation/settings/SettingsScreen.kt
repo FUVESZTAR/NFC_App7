@@ -135,7 +135,7 @@ fun SettingsScreen(
                 OutlinedButton(
                     onClick = { vm.resetDefaults() },
                     modifier = Modifier.weight(1f),
-                ) { Text("⟳ Reset") }
+                ) { Text(strings.resetDefaults) }
 
                 Button(
                     onClick = { vm.save() },
