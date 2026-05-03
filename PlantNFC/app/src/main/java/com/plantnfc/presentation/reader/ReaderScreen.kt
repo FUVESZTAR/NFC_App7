@@ -13,6 +13,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import com.plantnfc.presentation.LocalAppStrings
 import com.plantnfc.presentation.common.NfcBridge
 import com.plantnfc.util.GpsPacketCodec
 import com.plantnfc.util.NfcTextCodec
@@ -69,11 +70,13 @@ class ReaderViewModel @Inject constructor() : ViewModel() {
 fun ReaderScreen(
     onGoToGenerator: () -> Unit,
     onGoToList: () -> Unit,
+    onGoToSettings: () -> Unit,
     vm: ReaderViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsState()
     val snackbarHost = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val strings = LocalAppStrings.current
 
     // Register NFC read callback
     DisposableEffect(Unit) {
@@ -85,10 +88,11 @@ fun ReaderScreen(
         snackbarHost = { SnackbarHost(snackbarHost) },
         topBar = {
             TopAppBar(
-                title = { Text("📖 NFC Reader") },
+                title = { Text(strings.readerTitle) },
                 actions = {
-                    IconButton(onClick = onGoToGenerator) { Icon(Icons.Default.Edit, "Generator") }
-                    IconButton(onClick = onGoToList)      { Icon(Icons.Default.List, "List") }
+                    IconButton(onClick = onGoToGenerator) { Icon(Icons.Default.Edit, strings.generatorTitle) }
+                    IconButton(onClick = onGoToList)      { Icon(Icons.Default.List, strings.listTitle) }
+                    IconButton(onClick = onGoToSettings)  { Icon(Icons.Default.Settings, strings.settingsTitle) }
                 },
             )
         },
@@ -104,18 +108,18 @@ fun ReaderScreen(
             // Instructions
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Scan", style = MaterialTheme.typography.titleSmall)
-                    Text("Hold an NFC plant tag near your phone to read it.", style = MaterialTheme.typography.bodyMedium)
+                    Text(strings.scan, style = MaterialTheme.typography.titleSmall)
+                    Text(strings.holdNfcTag, style = MaterialTheme.typography.bodyMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { vm.clear() }, modifier = Modifier.weight(1f)) { Text("Clear") }
+                        Button(onClick = { vm.clear() }, modifier = Modifier.weight(1f)) { Text(strings.clear) }
                         OutlinedButton(
                             onClick = {
                                 copyText(android.app.Application(), state.nfcText)
-                                scope.launch { snackbarHost.showSnackbar("Copied!") }
+                                scope.launch { snackbarHost.showSnackbar(strings.msgCopied) }
                             },
                             modifier = Modifier.weight(1f),
                             enabled = state.nfcText.isNotBlank(),
-                        ) { Text("Copy NFC") }
+                        ) { Text(strings.copyNfc) }
                     }
                 }
             }
@@ -123,12 +127,12 @@ fun ReaderScreen(
             // Data preview
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("NFC Data", style = MaterialTheme.typography.titleSmall)
-                    MonoBlock(state.nfcText.ifEmpty { "No tag scanned yet…" })
-                    Text("Link", style = MaterialTheme.typography.titleSmall)
+                    Text(strings.nfcData, style = MaterialTheme.typography.titleSmall)
+                    MonoBlock(state.nfcText.ifEmpty { strings.noTagScanned })
+                    Text(strings.link, style = MaterialTheme.typography.titleSmall)
                     MonoBlock(state.nfcLink.ifEmpty { "–" })
                     if (state.serial.isNotBlank()) {
-                        Text("Serial: ${state.serial}", style = MaterialTheme.typography.bodySmall,
+                        Text("${strings.serial}: ${state.serial}", style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -138,16 +142,16 @@ fun ReaderScreen(
             if (state.fields.isNotEmpty()) {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Decoded Fields", style = MaterialTheme.typography.titleSmall)
+                        Text(strings.decodedFields, style = MaterialTheme.typography.titleSmall)
                         listOf(
-                            "NFC ID"    to state.fields["ncfId"],
-                            "Plant ID"  to state.fields["plantId"],
-                            "Name"      to state.fields["name"],
-                            "Variety"   to state.fields["variety"],
-                            "Latin"     to state.fields["latinName"],
-                            "Type"      to state.fields["nfcType"],
-                            "Date"      to state.fields["datum"],
-                            "Notes"     to state.fields["other"],
+                            strings.fieldNfcId   to state.fields["ncfId"],
+                            strings.fieldPlantId to state.fields["plantId"],
+                            strings.fieldName    to state.fields["name"],
+                            strings.fieldVariety to state.fields["variety"],
+                            strings.fieldLatin   to state.fields["latinName"],
+                            strings.fieldType    to state.fields["nfcType"],
+                            strings.fieldDate    to state.fields["datum"],
+                            strings.fieldNotes   to state.fields["other"],
                         ).forEach { (label, value) ->
                             if (!value.isNullOrBlank()) {
                                 Row(Modifier.fillMaxWidth()) {
@@ -165,8 +169,13 @@ fun ReaderScreen(
                 if (state.gpsLat != "–") {
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("GPS", style = MaterialTheme.typography.titleSmall)
-                            listOf("Lat" to state.gpsLat, "Lon" to state.gpsLon, "Alt" to state.gpsAlt, "Acc" to state.gpsAcc).forEach { (l, v) ->
+                            Text(strings.gps, style = MaterialTheme.typography.titleSmall)
+                            listOf(
+                                "Lat" to state.gpsLat,
+                                "Lon" to state.gpsLon,
+                                "Alt" to state.gpsAlt,
+                                "Acc" to state.gpsAcc,
+                            ).forEach { (l, v) ->
                                 Row(Modifier.fillMaxWidth()) {
                                     Text("$l:", Modifier.width(40.dp), style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant)

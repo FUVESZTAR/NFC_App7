@@ -2,8 +2,10 @@ package com.plantnfc.data.remote
 
 import com.plantnfc.domain.model.NfcRecord
 import com.plantnfc.domain.model.Plant
+import com.plantnfc.util.AppPreferences
 import com.plantnfc.util.NfcTextCodec
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.IOException
@@ -15,24 +17,22 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class GoogleSheetsDataSource @Inject constructor() {
+class GoogleSheetsDataSource @Inject constructor(
+    private val prefs: AppPreferences,
+) {
 
     companion object {
-        const val SHEET_ID = "1QHJzWztssucMlnozk2tV9ym6gLedgDj4Zh3DzCTFWCY"
-        const val SHEET_NAME = "plant_list"
         // Only load plants that are active in NFC (column CR = Active_in_NFC)
         private const val QUERY = "select A,B,C,D,E where CR = 'Y'"
-
-        const val SHEET_WRITER_URL =
-            "https://script.google.com/macros/s/AKfycbysWB68AM6TKlobnA3MLR_18LpJjGVkHolPf3G_WNziV3r93_fztJIenTVSoll-Kmtp/exec"
-        const val SHEET_WRITER_SECRET = "159753g9d5rt4Ht4eg7e5z4d6szo89fsef"
     }
 
     // ── Plant list ────────────────────────────────────────────────────────────
 
     suspend fun loadActivePlants(): List<Plant> = withContext(Dispatchers.IO) {
-        val encoded = URLEncoder.encode(QUERY, "UTF-8")
-        val url = "https://docs.google.com/spreadsheets/d/$SHEET_ID/gviz/tq?tqx=out:json&sheet=$SHEET_NAME&tq=$encoded"
+        val sheetId   = prefs.plantSheetId.first()
+        val sheetName = prefs.plantSheetName.first()
+        val encoded   = URLEncoder.encode(QUERY, "UTF-8")
+        val url = "https://docs.google.com/spreadsheets/d/$sheetId/gviz/tq?tqx=out:json&sheet=$sheetName&tq=$encoded"
         val raw = URL(url).readText()
         parseGvizResponse(raw)
     }
@@ -42,7 +42,8 @@ class GoogleSheetsDataSource @Inject constructor() {
     /** GET the Apps Script Web App and return the last used NFC ID, or null on failure. */
     suspend fun fetchLastNfcId(): Int? = withContext(Dispatchers.IO) {
         runCatching {
-            val body = URL(SHEET_WRITER_URL).readText()
+            val writerUrl = prefs.nfcWriterUrl.first()
+            val body = URL(writerUrl).readText()
             val json = JSONObject(body)
             val lastId = json.opt("lastId")
             if (lastId != null && lastId.toString().isNotBlank()) lastId.toString().toIntOrNull()
@@ -58,10 +59,12 @@ class GoogleSheetsDataSource @Inject constructor() {
      */
     suspend fun postNfcRecord(record: NfcRecord): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            val includeGps = !record.gpsPacket.isNullOrBlank()
+            val writerUrl    = prefs.nfcWriterUrl.first()
+            val writerSecret = prefs.nfcWriterSecret.first()
+            val includeGps   = !record.gpsPacket.isNullOrBlank()
             val includeOther = !record.other.isNullOrBlank()
             val body = JSONObject().apply {
-                put("key", SHEET_WRITER_SECRET)
+                put("key", writerSecret)
                 put("nfcId", record.nfcId)
                 put("plantId", record.plantId)
                 put("nfcTyp", record.nfcType.code)
@@ -74,7 +77,7 @@ class GoogleSheetsDataSource @Inject constructor() {
                 put("serialNum", record.serialNumber ?: "")
             }.toString()
 
-            val response = postWithRedirects(SHEET_WRITER_URL, body)
+            val response = postWithRedirects(writerUrl, body)
             val result = JSONObject(response)
             if (result.optString("status") != "success") {
                 throw Exception(result.optString("error", "Unknown error"))

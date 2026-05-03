@@ -22,7 +22,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.plantnfc.domain.model.NfcType
+import com.plantnfc.presentation.LocalAppStrings
 import com.plantnfc.presentation.common.NfcBridge
+import com.plantnfc.presentation.localize
 import com.plantnfc.util.NfcTextCodec
 import kotlinx.coroutines.launch
 
@@ -31,15 +33,17 @@ import kotlinx.coroutines.launch
 fun GeneratorScreen(
     onGoToReader: () -> Unit,
     onGoToList: () -> Unit,
+    onGoToSettings: () -> Unit,
     vm: GeneratorViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsState()
     val snackbarHost = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val strings = LocalAppStrings.current
 
     LaunchedEffect(state.snackbar) {
-        state.snackbar?.let { snackbarHost.showSnackbar(it); vm.dismissSnack() }
+        state.snackbar?.let { snackbarHost.showSnackbar(strings.localize(it)); vm.dismissSnack() }
     }
 
     var nfcWaiting by remember { mutableStateOf(false) }
@@ -51,17 +55,18 @@ fun GeneratorScreen(
         val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                       permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         if (granted) vm.startGps()
-        else scope.launch { snackbarHost.showSnackbar("Location permission required for GPS") }
+        else scope.launch { snackbarHost.showSnackbar(strings.msgLocationPermRequired) }
     }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHost) },
         topBar = {
             TopAppBar(
-                title = { Text("🌱 NFC Generator") },
+                title = { Text(strings.generatorTitle) },
                 actions = {
-                    IconButton(onClick = onGoToReader) { Icon(Icons.Default.DocumentScanner, "Reader") }
-                    IconButton(onClick = onGoToList)   { Icon(Icons.Default.List, "List") }
+                    IconButton(onClick = onGoToReader)   { Icon(Icons.Default.DocumentScanner, strings.readerTitle) }
+                    IconButton(onClick = onGoToList)     { Icon(Icons.Default.List, strings.listTitle) }
+                    IconButton(onClick = onGoToSettings) { Icon(Icons.Default.Settings, strings.settingsTitle) }
                 },
             )
         },
@@ -77,7 +82,7 @@ fun GeneratorScreen(
             // ── Plant picker ─────────────────────────────────────────────────
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Plant Selection", style = MaterialTheme.typography.titleSmall)
+                    Text(strings.plantSelection, style = MaterialTheme.typography.titleSmall)
 
                     var plantExpanded by remember { mutableStateOf(false) }
                     ExposedDropdownMenuBox(expanded = plantExpanded, onExpandedChange = { plantExpanded = it }) {
@@ -85,13 +90,13 @@ fun GeneratorScreen(
                             value = state.selectedPlant?.nameEn ?: "",
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("Plant") },
+                            label = { Text(strings.plant) },
                             modifier = Modifier.fillMaxWidth().menuAnchor(),
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(plantExpanded) },
                         )
                         ExposedDropdownMenu(expanded = plantExpanded, onDismissRequest = { plantExpanded = false }) {
                             if (state.isLoading) {
-                                DropdownMenuItem(text = { Text("Loading…") }, onClick = {})
+                                DropdownMenuItem(text = { Text(strings.loadingDots) }, onClick = {})
                             }
                             state.plants.distinctBy { it.nameEn }.take(100).forEach { p ->
                                 DropdownMenuItem(
@@ -109,7 +114,7 @@ fun GeneratorScreen(
                                 value = state.variety,
                                 onValueChange = {},
                                 readOnly = true,
-                                label = { Text("Variety") },
+                                label = { Text(strings.variety) },
                                 modifier = Modifier.fillMaxWidth().menuAnchor(),
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(varExpanded) },
                             )
@@ -126,12 +131,12 @@ fun GeneratorScreen(
             // ── Data fields ──────────────────────────────────────────────────
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("NFC Data", style = MaterialTheme.typography.titleSmall)
+                    Text(strings.nfcData, style = MaterialTheme.typography.titleSmall)
 
                     OutlinedTextField(
                         value = state.nfcId.toString(),
                         onValueChange = { vm.setNfcId(it.toIntOrNull() ?: 0) },
-                        label = { Text("NFC ID") },
+                        label = { Text(strings.nfcId) },
                         modifier = Modifier.fillMaxWidth(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
@@ -139,31 +144,41 @@ fun GeneratorScreen(
                     OutlinedTextField(
                         value = state.latinName,
                         onValueChange = vm::setLatinName,
-                        label = { Text("Latin Name") },
+                        label = { Text(strings.latinName) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                     )
                     OutlinedTextField(
                         value = state.datum,
                         onValueChange = vm::setDatum,
-                        label = { Text("Date (YYYY-MM-DD)") },
+                        label = { Text(strings.dateHint) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                     )
 
                     var typeExpanded by remember { mutableStateOf(false) }
                     ExposedDropdownMenuBox(expanded = typeExpanded, onExpandedChange = { typeExpanded = it }) {
+                        val typeLabel = when (state.nfcType) {
+                            NfcType.PLANT -> strings.nfcTypePlant
+                            NfcType.GRAFT -> strings.nfcTypeGraft
+                            NfcType.SEED  -> strings.nfcTypeSeed
+                        }
                         OutlinedTextField(
-                            value = state.nfcType.label,
+                            value = typeLabel,
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("NFC Type") },
+                            label = { Text(strings.nfcType) },
                             modifier = Modifier.fillMaxWidth().menuAnchor(),
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(typeExpanded) },
                         )
                         ExposedDropdownMenu(expanded = typeExpanded, onDismissRequest = { typeExpanded = false }) {
                             NfcType.entries.forEach { t ->
-                                DropdownMenuItem(text = { Text(t.label) }, onClick = { vm.setNfcType(t); typeExpanded = false })
+                                val tLabel = when (t) {
+                                    NfcType.PLANT -> strings.nfcTypePlant
+                                    NfcType.GRAFT -> strings.nfcTypeGraft
+                                    NfcType.SEED  -> strings.nfcTypeSeed
+                                }
+                                DropdownMenuItem(text = { Text(tLabel) }, onClick = { vm.setNfcType(t); typeExpanded = false })
                             }
                         }
                     }
@@ -177,9 +192,9 @@ fun GeneratorScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.GpsFixed, contentDescription = null, Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("GPS Data", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                        Text(strings.gpsData, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                         Text(
-                            text = if (state.gpsEnabled) "On" else "Off",
+                            text = if (state.gpsEnabled) strings.on else strings.off,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -216,7 +231,7 @@ fun GeneratorScreen(
                             ) {
                                 Icon(Icons.Default.PlayArrow, null, Modifier.size(16.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("Start Live Tracking")
+                                Text(strings.startLiveTracking)
                             }
                         } else {
                             Button(
@@ -228,16 +243,16 @@ fun GeneratorScreen(
                             ) {
                                 Icon(Icons.Default.Stop, null, Modifier.size(16.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("Stop & Lock Data")
+                                Text(strings.stopLockData)
                             }
                         }
 
                         // Live data rows
                         listOf(
-                            "Latitude"  to (state.gpsLat?.let { "%.6f".format(it) } ?: "–"),
-                            "Longitude" to (state.gpsLon?.let { "%.6f".format(it) } ?: "–"),
-                            "Altitude"  to (state.gpsAlt?.let { "${it}m" }           ?: "–"),
-                            "Accuracy"  to (state.gpsAcc?.let { "±${it}m" }          ?: "–"),
+                            strings.latitude  to (state.gpsLat?.let { "%.6f".format(it) } ?: "–"),
+                            strings.longitude to (state.gpsLon?.let { "%.6f".format(it) } ?: "–"),
+                            strings.altitude  to (state.gpsAlt?.let { "${it}m" }           ?: "–"),
+                            strings.accuracy  to (state.gpsAcc?.let { "±${it}m" }          ?: "–"),
                         ).forEach { (label, value) ->
                             Row(Modifier.fillMaxWidth()) {
                                 Text(
@@ -253,7 +268,7 @@ fun GeneratorScreen(
 
                         // Status
                         Text(
-                            text = state.gpsStatus,
+                            text = strings.localize(state.gpsStatus),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary,
                         )
@@ -262,7 +277,7 @@ fun GeneratorScreen(
                         val gpsPacketLocked = state.gpsPacketLocked
                         if (!gpsPacketLocked.isNullOrBlank()) {
                             Text(
-                                "Compressed Packet",
+                                strings.compressedPacket,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -296,14 +311,14 @@ fun GeneratorScreen(
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Preview", style = MaterialTheme.typography.titleSmall)
+                        Text(strings.preview, style = MaterialTheme.typography.titleSmall)
                         Spacer(Modifier.weight(1f))
                         Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.secondaryContainer) {
                             Text("${state.textBytes} B", Modifier.padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall)
                         }
                     }
                     Text(
-                        text = state.nfcText.ifEmpty { "Data will appear here…" },
+                        text = state.nfcText.ifEmpty { strings.dataWillAppear },
                         style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -311,7 +326,7 @@ fun GeneratorScreen(
                             .padding(10.dp),
                     )
                     Text(
-                        text = state.nfcLink.ifEmpty { "Link will appear here…" },
+                        text = state.nfcLink.ifEmpty { strings.linkWillAppear },
                         style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -324,12 +339,12 @@ fun GeneratorScreen(
             // ── Actions ──────────────────────────────────────────────────────
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Actions", style = MaterialTheme.typography.titleSmall)
+                    Text(strings.actions, style = MaterialTheme.typography.titleSmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         // Write NFC
                         Button(
                             onClick = {
-                                if (state.nfcText.isBlank()) { scope.launch { snackbarHost.showSnackbar("Generate NFC data first") }; return@Button }
+                                if (state.nfcText.isBlank()) { scope.launch { snackbarHost.showSnackbar(strings.msgGenerateFirst) }; return@Button }
                                 nfcWaiting = true
                                 NfcBridge.enqueueWrite(
                                     text = state.nfcText,
@@ -339,14 +354,14 @@ fun GeneratorScreen(
                                     onError = { vm.onNfcWriteError(it); nfcWaiting = false },
                                     onDone = { nfcWaiting = false },
                                 )
-                                scope.launch { snackbarHost.showSnackbar("Tap NFC tag to phone…", duration = SnackbarDuration.Short) }
+                                scope.launch { snackbarHost.showSnackbar(strings.msgTapNfcTag, duration = SnackbarDuration.Short) }
                             },
                             modifier = Modifier.weight(1f),
                             enabled = !nfcWaiting && state.nfcText.isNotBlank(),
                         ) {
                             Icon(Icons.Default.Nfc, null, Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text(if (nfcWaiting) "Waiting…" else "Write NFC")
+                            Text(if (nfcWaiting) strings.waiting else strings.writeNfc)
                         }
 
                         // Save
@@ -355,7 +370,7 @@ fun GeneratorScreen(
                             modifier = Modifier.weight(1f),
                             enabled = !state.isSaving,
                         ) {
-                            Text(if (state.isSaving) "Saving…" else "Save")
+                            Text(if (state.isSaving) strings.saving else strings.save)
                         }
                     }
 
@@ -364,20 +379,20 @@ fun GeneratorScreen(
                         OutlinedButton(
                             onClick = {
                                 copyText(context, state.nfcText)
-                                scope.launch { snackbarHost.showSnackbar("Copied!") }
+                                scope.launch { snackbarHost.showSnackbar(strings.msgCopied) }
                             },
                             modifier = Modifier.weight(1f),
                             enabled = state.nfcText.isNotBlank(),
-                        ) { Text("Copy NFC") }
+                        ) { Text(strings.copyNfc) }
 
                         OutlinedButton(
                             onClick = {
                                 copyText(context, state.nfcLink)
-                                scope.launch { snackbarHost.showSnackbar("Copied!") }
+                                scope.launch { snackbarHost.showSnackbar(strings.msgCopied) }
                             },
                             modifier = Modifier.weight(1f),
                             enabled = state.nfcLink.isNotBlank(),
-                        ) { Text("Copy Link") }
+                        ) { Text(strings.copyLink) }
                     }
                 }
             }
