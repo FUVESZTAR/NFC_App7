@@ -13,6 +13,9 @@ sealed class SnackMsg {
     object Copied                       : SnackMsg()
     object Synced                       : SnackMsg()
     object Imported                     : SnackMsg()
+    object Refreshed                    : SnackMsg()
+    data class SyncFailed(val detail: String) : SnackMsg()
+    data class RefreshFailed(val detail: String) : SnackMsg()
 }
 
 /** GPS tracking status produced by GeneratorViewModel. */

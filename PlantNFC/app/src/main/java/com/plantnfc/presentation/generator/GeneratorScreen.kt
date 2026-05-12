@@ -64,6 +64,16 @@ fun GeneratorScreen(
             TopAppBar(
                 title = { Text(strings.generatorTitle) },
                 actions = {
+                    IconButton(
+                        onClick = { vm.refreshPlantsFromSource() },
+                        enabled = !state.isRefreshing,
+                    ) {
+                        if (state.isRefreshing) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.Refresh, strings.refreshSource)
+                        }
+                    }
                     IconButton(onClick = onGoToReader)   { Icon(Icons.Default.DocumentScanner, strings.readerTitle) }
                     IconButton(onClick = onGoToList)     { Icon(Icons.Default.List, strings.listTitle) }
                     IconButton(onClick = onGoToSettings) { Icon(Icons.Default.Settings, strings.settingsTitle) }

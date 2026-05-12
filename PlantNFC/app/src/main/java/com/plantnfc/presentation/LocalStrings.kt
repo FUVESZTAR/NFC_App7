@@ -41,10 +41,13 @@ data class AppStrings(
     val dataWillAppear: String,
     val linkWillAppear: String,
     val actions: String,
+    val refreshSource: String,
     val writeNfc: String,
     val waiting: String,
     val save: String,
     val saving: String,
+    val saveToCloud: String,
+    val syncingCloud: String,
     val copyNfc: String,
     val copyLink: String,
 
@@ -107,6 +110,9 @@ data class AppStrings(
     val msgCopied: String,
     val msgSynced: String,
     val msgImported: String,
+    val msgRefreshed: String,
+    val msgSyncFailedPrefix: String,
+    val msgRefreshFailedPrefix: String,
 
     // GpsStatus translations
     val gpsReady: String,
@@ -117,11 +123,14 @@ data class AppStrings(
     val gpsPermDenied: String,
 )
 
+private fun prefixed(prefix: String, detail: String): String =
+    if (detail.isBlank()) prefix.trimEnd() else "${prefix.trimEnd()} $detail"
+
 fun AppStrings.localize(msg: SnackMsg): String = when (msg) {
     is SnackMsg.NfcWriteSuccess      -> msgNfcWriteSuccess
-    is SnackMsg.NfcWriteError        -> "$msgNfcWriteErrorPrefix${msg.detail}"
+    is SnackMsg.NfcWriteError        -> prefixed(msgNfcWriteErrorPrefix, msg.detail)
     is SnackMsg.Saved                -> msgSaved
-    is SnackMsg.SaveFailed           -> "$msgSaveFailedPrefix${msg.detail}"
+    is SnackMsg.SaveFailed           -> prefixed(msgSaveFailedPrefix, msg.detail)
     is SnackMsg.SelectPlantFirst     -> msgSelectPlantFirst
     is SnackMsg.GenerateFirst        -> msgGenerateFirst
     is SnackMsg.TapNfcTag            -> msgTapNfcTag
@@ -129,6 +138,9 @@ fun AppStrings.localize(msg: SnackMsg): String = when (msg) {
     is SnackMsg.Copied               -> msgCopied
     is SnackMsg.Synced               -> msgSynced
     is SnackMsg.Imported             -> msgImported
+    is SnackMsg.Refreshed            -> msgRefreshed
+    is SnackMsg.SyncFailed           -> prefixed(msgSyncFailedPrefix, msg.detail)
+    is SnackMsg.RefreshFailed        -> prefixed(msgRefreshFailedPrefix, msg.detail)
 }
 
 fun AppStrings.localize(status: GpsStatus): String = when (status) {
@@ -172,10 +184,13 @@ val englishStrings = AppStrings(
     dataWillAppear          = "Data will appear here…",
     linkWillAppear          = "Link will appear here…",
     actions                 = "Actions",
+    refreshSource           = "Refresh Source Data",
     writeNfc                = "Write NFC",
     waiting                 = "Waiting…",
     save                    = "Save",
     saving                  = "Saving…",
+    saveToCloud             = "Save to Cloud",
+    syncingCloud            = "Saving to Cloud…",
     copyNfc                 = "Copy NFC",
     copyLink                = "Copy Link",
     scan                    = "Scan",
@@ -228,6 +243,9 @@ val englishStrings = AppStrings(
     msgCopied               = "Copied!",
     msgSynced               = "Synced!",
     msgImported             = "Imported!",
+    msgRefreshed            = "Source data refreshed!",
+    msgSyncFailedPrefix     = "Cloud save failed: ",
+    msgRefreshFailedPrefix  = "Refresh failed: ",
     gpsReady                = "Ready.",
     gpsFetching             = "Fetching GPS satellites…",
     gpsUpdatingPrefix       = "Updating… (±",
@@ -266,10 +284,13 @@ val hungarianStrings = AppStrings(
     dataWillAppear          = "Az adatok itt jelennek meg…",
     linkWillAppear          = "A link itt jelenik meg…",
     actions                 = "Műveletek",
+    refreshSource           = "Forrásadat frissítése",
     writeNfc                = "NFC Írás",
     waiting                 = "Várakozás…",
     save                    = "Mentés",
     saving                  = "Mentés…",
+    saveToCloud             = "Mentés felhőbe",
+    syncingCloud            = "Mentés felhőbe…",
     copyNfc                 = "NFC Másolása",
     copyLink                = "Link Másolása",
     scan                    = "Olvasás",
@@ -322,6 +343,9 @@ val hungarianStrings = AppStrings(
     msgCopied               = "Másolva!",
     msgSynced               = "Szinkronizálva!",
     msgImported             = "Importálva!",
+    msgRefreshed            = "Forrásadatok frissítve!",
+    msgSyncFailedPrefix     = "Felhő mentés sikertelen: ",
+    msgRefreshFailedPrefix  = "Frissítés sikertelen: ",
     gpsReady                = "Kész.",
     gpsFetching             = "GPS műholdak keresése…",
     gpsUpdatingPrefix       = "Frissítés… (±",
