@@ -2,7 +2,9 @@ name: Build APK
 
 on:
   push:
-    branches: [ "**" ]
+    branches: [ main, master, copilot/* ]
+  pull_request:
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -10,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
@@ -19,25 +21,23 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Cache Gradle packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle.kts', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
+      - name: Download gradle-wrapper.jar
+        run: |
+          mkdir -p PlantNFC/gradle/wrapper
+          curl -fsSL \
+            "https://raw.githubusercontent.com/gradle/gradle/v8.9.0/gradle/wrapper/gradle-wrapper.jar" \
+            -o PlantNFC/gradle/wrapper/gradle-wrapper.jar
 
       - name: Grant execute permission for gradlew
         run: chmod +x PlantNFC/gradlew
 
       - name: Build debug APK
-        run: cd PlantNFC && ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon
+        working-directory: PlantNFC
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PlantNFC-debug-apk
+          name: PlantNFC-debug
           path: PlantNFC/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30

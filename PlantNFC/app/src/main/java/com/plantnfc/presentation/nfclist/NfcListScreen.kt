@@ -16,6 +16,9 @@ import androidx.lifecycle.viewModelScope
 import com.plantnfc.domain.model.NfcRecord
 import com.plantnfc.domain.model.SyncStatus
 import com.plantnfc.domain.repository.NfcRecordRepository
+import com.plantnfc.presentation.LocalAppStrings
+import com.plantnfc.presentation.SnackMsg
+import com.plantnfc.presentation.localize
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -30,7 +33,7 @@ class NfcListViewModel @Inject constructor(
 
     private val _query   = MutableStateFlow("")
     private val _syncing = MutableStateFlow(false)
-    private val _msg     = MutableStateFlow<String?>(null)
+    private val _msg     = MutableStateFlow<SnackMsg?>(null)
 
     val state: StateFlow<NfcListState> = combine(repo.getAllRecords(), _query, _syncing, _msg) { records, q, syncing, msg ->
         val filtered = if (q.isBlank()) records
@@ -43,8 +46,8 @@ class NfcListViewModel @Inject constructor(
 
     fun setQuery(q: String) = _query.update { q }
     fun delete(id: Long) = viewModelScope.launch { repo.delete(id) }
-    fun syncUp() = viewModelScope.launch { _syncing.value = true; repo.syncToRemote(); _syncing.value = false; _msg.value = "Synced!" }
-    fun syncDown() = viewModelScope.launch { _syncing.value = true; repo.syncFromRemote(); _syncing.value = false; _msg.value = "Imported!" }
+    fun syncUp()   = viewModelScope.launch { _syncing.value = true; repo.syncToRemote();   _syncing.value = false; _msg.value = SnackMsg.Synced }
+    fun syncDown() = viewModelScope.launch { _syncing.value = true; repo.syncFromRemote(); _syncing.value = false; _msg.value = SnackMsg.Imported }
     fun dismissMsg() = _msg.update { null }
 }
 
@@ -52,7 +55,7 @@ data class NfcListState(
     val records: List<NfcRecord> = emptyList(),
     val query: String = "",
     val syncing: Boolean = false,
-    val message: String? = null,
+    val message: SnackMsg? = null,
 )
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -65,17 +68,18 @@ fun NfcListScreen(
 ) {
     val state by vm.state.collectAsState()
     val snackbarHost = remember { SnackbarHostState() }
+    val strings = LocalAppStrings.current
 
     LaunchedEffect(state.message) {
-        state.message?.let { snackbarHost.showSnackbar(it); vm.dismissMsg() }
+        state.message?.let { snackbarHost.showSnackbar(strings.localize(it)); vm.dismissMsg() }
     }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHost) },
         topBar = {
             TopAppBar(
-                title = { Text("📋 NFC Records") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") } },
+                title = { Text(strings.listTitle) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, strings.cancel) } },
                 actions = {
                     if (state.syncing) {
                         CircularProgressIndicator(Modifier.size(24.dp).padding(end = 8.dp), strokeWidth = 2.dp)
@@ -91,14 +95,14 @@ fun NfcListScreen(
             OutlinedTextField(
                 value = state.query,
                 onValueChange = vm::setQuery,
-                label = { Text("Search…") },
+                label = { Text(strings.search) },
                 leadingIcon = { Icon(Icons.Default.Search, null) },
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                 singleLine = true,
             )
             if (state.records.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No records yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(strings.noRecordsYet, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
                 LazyColumn(
@@ -117,14 +121,15 @@ fun NfcListScreen(
 
 @Composable
 private fun RecordCard(record: NfcRecord, onDelete: () -> Unit) {
+    val strings = LocalAppStrings.current
     var showConfirm by remember { mutableStateOf(false) }
     if (showConfirm) {
         AlertDialog(
             onDismissRequest = { showConfirm = false },
-            title = { Text("Delete?") },
+            title = { Text(strings.deleteQuestion) },
             text = { Text("NFC #${record.nfcId} – ${record.plantName}") },
-            confirmButton = { TextButton(onClick = { onDelete(); showConfirm = false }) { Text("Delete") } },
-            dismissButton = { TextButton(onClick = { showConfirm = false }) { Text("Cancel") } },
+            confirmButton = { TextButton(onClick = { onDelete(); showConfirm = false }) { Text(strings.delete) } },
+            dismissButton = { TextButton(onClick = { showConfirm = false }) { Text(strings.cancel) } },
         )
     }
     Card(Modifier.fillMaxWidth()) {
@@ -135,11 +140,15 @@ private fun RecordCard(record: NfcRecord, onDelete: () -> Unit) {
                 Text(record.latinName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(4.dp))
                 Text("${record.nfcType.label} • ${record.datum}", style = MaterialTheme.typography.bodySmall)
-                val syncLabel = when (record.syncStatus) { SyncStatus.SYNCED -> "✓ synced"; SyncStatus.PENDING -> "↑ pending"; SyncStatus.CONFLICT -> "! conflict" }
+                val syncLabel = when (record.syncStatus) {
+                    SyncStatus.SYNCED   -> strings.syncedLabel
+                    SyncStatus.PENDING  -> strings.pendingLabel
+                    SyncStatus.CONFLICT -> strings.conflictLabel
+                }
                 Text(syncLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
             }
             IconButton(onClick = { showConfirm = true }) {
-                Icon(Icons.Default.DeleteOutline, "Delete", tint = MaterialTheme.colorScheme.error)
+                Icon(Icons.Default.DeleteOutline, strings.delete, tint = MaterialTheme.colorScheme.error)
             }
         }
     }

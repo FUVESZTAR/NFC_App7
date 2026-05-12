@@ -10,6 +10,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -18,11 +19,17 @@ import com.plantnfc.presentation.common.NfcBridge
 import com.plantnfc.presentation.generator.GeneratorScreen
 import com.plantnfc.presentation.nfclist.NfcListScreen
 import com.plantnfc.presentation.reader.ReaderScreen
+import com.plantnfc.presentation.settings.SettingsScreen
 import com.plantnfc.presentation.theme.PlantNfcTheme
+import com.plantnfc.util.AppPreferences
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.map
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject lateinit var appPreferences: AppPreferences
 
     private var nfcAdapter: NfcAdapter? = null
 
@@ -32,24 +39,36 @@ class MainActivity : ComponentActivity() {
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
 
         setContent {
+            // Observe the language setting and pick the matching string set
+            val language by appPreferences.language
+                .map { if (it == "hu") hungarianStrings else englishStrings }
+                .collectAsState(initial = englishStrings)
+
             PlantNfcTheme {
-                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    val nav = rememberNavController()
-                    NavHost(nav, startDestination = "generator") {
-                        composable("generator") {
-                            GeneratorScreen(
-                                onGoToReader = { nav.navigate("reader") },
-                                onGoToList   = { nav.navigate("list") },
-                            )
-                        }
-                        composable("reader") {
-                            ReaderScreen(
-                                onGoToGenerator = { nav.navigate("generator") },
-                                onGoToList      = { nav.navigate("list") },
-                            )
-                        }
-                        composable("list") {
-                            NfcListScreen(onBack = { nav.popBackStack() })
+                CompositionLocalProvider(LocalAppStrings provides language) {
+                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                        val nav = rememberNavController()
+                        NavHost(nav, startDestination = "generator") {
+                            composable("generator") {
+                                GeneratorScreen(
+                                    onGoToReader   = { nav.navigate("reader") },
+                                    onGoToList     = { nav.navigate("list") },
+                                    onGoToSettings = { nav.navigate("settings") },
+                                )
+                            }
+                            composable("reader") {
+                                ReaderScreen(
+                                    onGoToGenerator = { nav.navigate("generator") },
+                                    onGoToList      = { nav.navigate("list") },
+                                    onGoToSettings  = { nav.navigate("settings") },
+                                )
+                            }
+                            composable("list") {
+                                NfcListScreen(onBack = { nav.popBackStack() })
+                            }
+                            composable("settings") {
+                                SettingsScreen(onBack = { nav.popBackStack() })
+                            }
                         }
                     }
                 }
