@@ -53,7 +53,13 @@ class NfcListViewModel @Inject constructor(
             .onFailure { _msg.value = SnackMsg.SyncFailed(it.message ?: "Unknown error") }
         _syncing.value = false
     }
-    fun syncDown() = viewModelScope.launch { _syncing.value = true; repo.syncFromRemote(); _syncing.value = false; _msg.value = SnackMsg.Imported }
+    fun syncDown() = viewModelScope.launch {
+        _syncing.value = true
+        repo.syncFromRemote()
+            .onSuccess { _msg.value = SnackMsg.Imported }
+            .onFailure { _msg.value = SnackMsg.SyncFailed(it.message ?: "Unknown error") }
+        _syncing.value = false
+    }
     fun dismissMsg() = _msg.update { null }
 }
 

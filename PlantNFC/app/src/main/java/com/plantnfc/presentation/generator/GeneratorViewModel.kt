@@ -70,7 +70,8 @@ class GeneratorViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
-            runCatching { plantRepo.refreshPlants() }
+            plantRepo.refreshPlants()
+                .onFailure { snack(SnackMsg.RefreshFailed(it.message ?: "Unknown error")) }
             val localNext = recordRepo.nextNfcId()
             val remoteLastId = runCatching { recordRepo.loadRemoteLastId() }.getOrNull()
             val nextId = if (remoteLastId != null) maxOf(localNext, remoteLastId + 1) else localNext

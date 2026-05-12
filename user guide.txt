@@ -1,0 +1,44 @@
+NFC App7 - User Guide
+
+1) Start the app
+- Open PlantNFC on your Android device.
+- Use the top-right icons to switch between Generator, Reader, List, and Settings.
+
+2) Configure settings (first-time setup)
+- Open Settings.
+- Verify Plant Sheet ID and Plant Sheet Name.
+- Verify NFC Writer URL and NFC Writer Secret.
+- Tap Save.
+- Tap Reload Plants to refresh plant data from Google Sheets.
+
+3) Generate NFC data
+- Open NFC Generator.
+- In Plant selection, type/search and select a plant.
+- Select a variety (if available).
+- Review/edit NFC ID, Latin name, Date, NFC Type.
+- (Optional) Enable GPS, start tracking, then stop to lock packet.
+- Check Preview (NFC text + link).
+
+4) Write to NFC tag
+- Tap Write NFC.
+- Hold the phone near the NFC tag.
+- Wait for success message.
+
+5) Save record locally
+- Tap Save to store the generated record in the local list.
+
+6) Sync with cloud (NFC List)
+- Open NFC List.
+- Tap Save to Cloud to upload pending records.
+- Use Download to import records if remote import is enabled by backend.
+
+7) Read NFC
+- Open NFC Reader.
+- Tap Read NFC and scan a tag.
+- Review decoded fields, copy NFC text/link, or open link.
+
+8) Troubleshooting
+- Empty plant dropdown: verify sheet ID/name in Settings and tap Reload Plants.
+- Sync errors: verify writer URL/secret and internet connection.
+- GPS not updating: grant location permission.
+- NFC write/read unavailable: check device NFC support and NFC enabled in system settings.
