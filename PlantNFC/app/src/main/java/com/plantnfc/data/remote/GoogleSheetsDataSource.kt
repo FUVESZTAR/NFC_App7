@@ -122,7 +122,10 @@ class GoogleSheetsDataSource @Inject constructor(
     private fun parseGvizResponse(raw: String): List<Plant> {
         val match = Regex("""google\.visualization\.Query\.setResponse\(([\s\S]*?)\)\s*;?\s*$""")
             .find(raw)
-            ?: throw IOException("Unexpected Google Sheets response format")
+            ?: throw IOException(
+                "Failed to parse Google Sheets response: expected " +
+                    "'google.visualization.Query.setResponse(...)' wrapper",
+            )
         val table = JSONObject(match.groupValues[1]).getJSONObject("table")
         val cols = table.getJSONArray("cols")
         val rows = table.getJSONArray("rows")
@@ -144,10 +147,11 @@ class GoogleSheetsDataSource @Inject constructor(
             }
             if (headerToValue.values.all { it.isBlank() }) return@mapNotNull null
 
-            val normalizedHeaderToValue = headerToValue.mapKeys { (header, _) -> header.lowercase(Locale.US) }
+            val lowerCaseHeaders = headerToValue.mapKeys { (header, _) -> header.lowercase(Locale.US) }
 
             fun byHeaderOrIndex(header: String, fallbackIndex: Int): String {
-                val value = normalizedHeaderToValue[header.lowercase(Locale.US)]
+                val normalizedHeader = header.lowercase(Locale.US)
+                val value = lowerCaseHeaders[normalizedHeader]
                 return if (!value.isNullOrBlank()) value else cellText(fallbackIndex)
             }
 
