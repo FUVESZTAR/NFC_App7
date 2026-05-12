@@ -40,6 +40,7 @@ data class GeneratorUiState(
     val textBytes: Int = 0,
     val snackbar: SnackMsg? = null,
     val isSaving: Boolean = false,
+    val isRefreshing: Boolean = false,
     // GPS
     val gpsEnabled: Boolean = false,
     val gpsTracking: Boolean = false,
@@ -109,6 +110,13 @@ class GeneratorViewModel @Inject constructor(
     fun onNfcWriteSuccess() = snack(SnackMsg.NfcWriteSuccess)
     fun onNfcWriteError(msg: String) = snack(SnackMsg.NfcWriteError(msg))
     fun dismissSnack() = _state.update { it.copy(snackbar = null) }
+    fun refreshPlantsFromSource() = viewModelScope.launch {
+        _state.update { it.copy(isRefreshing = true) }
+        plantRepo.refreshPlants()
+            .onSuccess { snack(SnackMsg.Refreshed) }
+            .onFailure { snack(SnackMsg.RefreshFailed(it.message ?: "Unknown error")) }
+        _state.update { it.copy(isRefreshing = false) }
+    }
 
     // ── GPS ───────────────────────────────────────────────────────────────────
 
@@ -196,8 +204,6 @@ class GeneratorViewModel @Inject constructor(
                     link         = s.nfcLink,
                     gpsPacket    = if (s.gpsEnabled) s.gpsPacketLocked else null,
                 ))
-                // Immediately push to Google Sheets; failure is non-fatal (stays PENDING locally)
-                recordRepo.syncToRemote()
                 val nextId = recordRepo.nextNfcId()
                 _state.update { it.copy(nfcId = nextId) }
                 snack(SnackMsg.Saved)

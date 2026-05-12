@@ -46,7 +46,13 @@ class NfcListViewModel @Inject constructor(
 
     fun setQuery(q: String) = _query.update { q }
     fun delete(id: Long) = viewModelScope.launch { repo.delete(id) }
-    fun syncUp()   = viewModelScope.launch { _syncing.value = true; repo.syncToRemote();   _syncing.value = false; _msg.value = SnackMsg.Synced }
+    fun syncUp()   = viewModelScope.launch {
+        _syncing.value = true
+        repo.syncToRemote()
+            .onSuccess { _msg.value = SnackMsg.Synced }
+            .onFailure { _msg.value = SnackMsg.SyncFailed(it.message ?: "Unknown error") }
+        _syncing.value = false
+    }
     fun syncDown() = viewModelScope.launch { _syncing.value = true; repo.syncFromRemote(); _syncing.value = false; _msg.value = SnackMsg.Imported }
     fun dismissMsg() = _msg.update { null }
 }
@@ -84,7 +90,6 @@ fun NfcListScreen(
                     if (state.syncing) {
                         CircularProgressIndicator(Modifier.size(24.dp).padding(end = 8.dp), strokeWidth = 2.dp)
                     } else {
-                        IconButton(onClick = { vm.syncUp() })   { Icon(Icons.Default.CloudUpload, "Upload") }
                         IconButton(onClick = { vm.syncDown() }) { Icon(Icons.Default.CloudDownload, "Download") }
                     }
                 },
@@ -92,6 +97,21 @@ fun NfcListScreen(
         },
     ) { padding ->
         Column(Modifier.padding(padding)) {
+            Button(
+                onClick = { vm.syncUp() },
+                enabled = !state.syncing,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 16.dp),
+            ) {
+                if (state.syncing) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(strings.syncingCloud)
+                } else {
+                    Icon(Icons.Default.CloudUpload, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(strings.saveToCloud)
+                }
+            }
             OutlinedTextField(
                 value = state.query,
                 onValueChange = vm::setQuery,
