@@ -13,6 +13,7 @@ import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -126,9 +127,9 @@ class GoogleSheetsDataSource @Inject constructor(
         val cols = table.getJSONArray("cols")
         val rows = table.getJSONArray("rows")
 
-        val headers = (0 until cols.length()).associateWith { i ->
-            cols.getJSONObject(i).optString("label").trim().ifEmpty {
-                cols.getJSONObject(i).optString("id").trim()
+        val indexToHeader = (0 until cols.length()).associateWith { columnIndex ->
+            cols.getJSONObject(columnIndex).optString("label").trim().ifEmpty {
+                cols.getJSONObject(columnIndex).optString("id").trim()
             }
         }
 
@@ -138,13 +139,15 @@ class GoogleSheetsDataSource @Inject constructor(
             fun cellText(index: Int): String =
                 cells.optJSONObject(index)?.opt("v")?.toString()?.trim().orEmpty()
 
-            val entry = headers.mapValues { (ci, _) -> cellText(ci) }
-            if (entry.values.all { it.isBlank() }) return@mapNotNull null
+            val headerToValue = indexToHeader.entries.associate { (columnIndex, header) ->
+                header to cellText(columnIndex)
+            }
+            if (headerToValue.values.all { it.isBlank() }) return@mapNotNull null
+
+            val normalizedHeaderToValue = headerToValue.mapKeys { (header, _) -> header.lowercase(Locale.US) }
 
             fun byHeaderOrIndex(header: String, fallbackIndex: Int): String {
-                val value = entry.entries.firstOrNull { (k, _) ->
-                    k.equals(header, ignoreCase = true)
-                }?.value
+                val value = normalizedHeaderToValue[header.lowercase(Locale.US)]
                 return if (!value.isNullOrBlank()) value else cellText(fallbackIndex)
             }
 
