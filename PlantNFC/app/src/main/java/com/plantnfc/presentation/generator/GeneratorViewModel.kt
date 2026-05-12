@@ -28,6 +28,7 @@ data class GeneratorUiState(
     val plants: List<Plant> = emptyList(),
     val isLoading: Boolean = false,
     val selectedPlant: Plant? = null,
+    val plantSearchQuery: String = "",
     val variety: String = "",
     val varieties: List<String> = emptyList(),
     val nfcId: Int = 0,
@@ -88,14 +89,34 @@ class GeneratorViewModel @Inject constructor(
             _state.update { s -> GeneratorUiState(nfcId = s.nfcId, plants = s.plants) }
             return
         }
-        val vars = _state.value.plants.filter { it.nameEn == plant.nameEn }.map { it.nameVariety }.distinct()
-        _state.update { it.copy(selectedPlant = plant, latinName = plant.latinName, varieties = vars, variety = vars.firstOrNull() ?: "") }
+        // Group varieties by latinName (the unique species identifier)
+        val vars = _state.value.plants.filter { it.latinName == plant.latinName }.map { it.nameVariety }.distinct()
+        _state.update { it.copy(
+            selectedPlant = plant,
+            latinName = plant.latinName,
+            plantSearchQuery = plant.latinName,
+            varieties = vars,
+            variety = vars.firstOrNull() ?: "",
+        )}
         updatePreview()
     }
 
     fun selectVariety(v: String) {
-        val match = _state.value.plants.firstOrNull { it.nameEn == _state.value.selectedPlant?.nameEn && it.nameVariety == v }
+        // Match by latinName (not nameEn) since that is the species grouping key
+        val match = _state.value.plants.firstOrNull { it.latinName == _state.value.selectedPlant?.latinName && it.nameVariety == v }
         _state.update { it.copy(variety = v, latinName = match?.latinName ?: it.latinName) }
+        updatePreview()
+    }
+
+    /** Called when the user types in the plant search field. Treats the typed text as the latin name. */
+    fun setPlantSearchQuery(q: String) {
+        _state.update { it.copy(
+            plantSearchQuery = q,
+            selectedPlant = null,
+            varieties = emptyList(),
+            variety = "",
+            latinName = q,
+        )}
         updatePreview()
     }
 
@@ -180,14 +201,14 @@ class GeneratorViewModel @Inject constructor(
 
     fun saveRecord() {
         val s = _state.value
-        if (s.selectedPlant == null) { snack(SnackMsg.SelectPlantFirst); return }
+        if (s.selectedPlant == null && s.latinName.isBlank()) { snack(SnackMsg.SelectPlantFirst); return }
         viewModelScope.launch {
             _state.update { it.copy(isSaving = true) }
             runCatching {
                 recordRepo.insert(NfcRecord(
                     nfcId        = s.nfcId,
-                    plantId      = s.selectedPlant.plantId,
-                    plantName    = s.selectedPlant.nameEn,
+                    plantId      = s.selectedPlant?.plantId ?: "",
+                    plantName    = s.selectedPlant?.nameEn ?: s.latinName,
                     variety      = s.variety,
                     latinName    = s.latinName,
                     nfcType      = s.nfcType,

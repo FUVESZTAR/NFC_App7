@@ -85,23 +85,40 @@ fun GeneratorScreen(
                     Text(strings.plantSelection, style = MaterialTheme.typography.titleSmall)
 
                     var plantExpanded by remember { mutableStateOf(false) }
+                    val plantQuery = state.plantSearchQuery
+                    // Filter by latin name; show all when query is blank
+                    val filteredPlants = remember(state.plants, plantQuery) {
+                        val distinct = state.plants.distinctBy { it.latinName }
+                        if (plantQuery.isBlank()) distinct.take(100)
+                        else distinct.filter { it.latinName.contains(plantQuery, ignoreCase = true) }.take(100)
+                    }
+                    val showFreeTextOption = plantQuery.isNotBlank() && state.selectedPlant == null
+
                     ExposedDropdownMenuBox(expanded = plantExpanded, onExpandedChange = { plantExpanded = it }) {
                         OutlinedTextField(
-                            value = state.selectedPlant?.nameEn ?: "",
-                            onValueChange = {},
-                            readOnly = true,
+                            value = plantQuery,
+                            onValueChange = { vm.setPlantSearchQuery(it); plantExpanded = true },
                             label = { Text(strings.plant) },
+                            placeholder = { Text(strings.plantSearchHint) },
                             modifier = Modifier.fillMaxWidth().menuAnchor(),
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(plantExpanded) },
+                            singleLine = true,
                         )
                         ExposedDropdownMenu(expanded = plantExpanded, onDismissRequest = { plantExpanded = false }) {
                             if (state.isLoading) {
                                 DropdownMenuItem(text = { Text(strings.loadingDots) }, onClick = {})
                             }
-                            state.plants.distinctBy { it.nameEn }.take(100).forEach { p ->
+                            filteredPlants.forEach { p ->
                                 DropdownMenuItem(
-                                    text = { Text(p.nameEn) },
+                                    text = { Text(p.latinName) },
                                     onClick = { vm.selectPlant(p); plantExpanded = false },
+                                )
+                            }
+                            if (showFreeTextOption) {
+                                HorizontalDivider()
+                                DropdownMenuItem(
+                                    text = { Text("${strings.freeTextOption} \"$plantQuery\"") },
+                                    onClick = { plantExpanded = false },
                                 )
                             }
                         }
