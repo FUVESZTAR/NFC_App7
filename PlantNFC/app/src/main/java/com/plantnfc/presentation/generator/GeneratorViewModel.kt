@@ -109,13 +109,13 @@ class GeneratorViewModel @Inject constructor(
     }
 
     /** Called when the user types in the plant search field. Treats the typed text as the latin name. */
-    fun setPlantSearchQuery(q: String) {
+    fun setPlantSearchQuery(query: String) {
         _state.update { it.copy(
-            plantSearchQuery = q,
+            plantSearchQuery = query,
             selectedPlant = null,
             varieties = emptyList(),
             variety = "",
-            latinName = q,
+            latinName = query,
         )}
         updatePreview()
     }
