@@ -121,11 +121,14 @@ data class AppStrings(
     val gpsPermDenied: String,
 )
 
+private fun prefixed(prefix: String, detail: String): String =
+    if (detail.isBlank()) prefix.trimEnd() else "${prefix.trimEnd()} $detail"
+
 fun AppStrings.localize(msg: SnackMsg): String = when (msg) {
     is SnackMsg.NfcWriteSuccess      -> msgNfcWriteSuccess
-    is SnackMsg.NfcWriteError        -> "$msgNfcWriteErrorPrefix${msg.detail}"
+    is SnackMsg.NfcWriteError        -> prefixed(msgNfcWriteErrorPrefix, msg.detail)
     is SnackMsg.Saved                -> msgSaved
-    is SnackMsg.SaveFailed           -> "$msgSaveFailedPrefix${msg.detail}"
+    is SnackMsg.SaveFailed           -> prefixed(msgSaveFailedPrefix, msg.detail)
     is SnackMsg.SelectPlantFirst     -> msgSelectPlantFirst
     is SnackMsg.GenerateFirst        -> msgGenerateFirst
     is SnackMsg.TapNfcTag            -> msgTapNfcTag
@@ -134,8 +137,8 @@ fun AppStrings.localize(msg: SnackMsg): String = when (msg) {
     is SnackMsg.Synced               -> msgSynced
     is SnackMsg.Imported             -> msgImported
     is SnackMsg.Refreshed            -> msgRefreshed
-    is SnackMsg.SyncFailed           -> "$msgSyncFailedPrefix${msg.detail}"
-    is SnackMsg.RefreshFailed        -> "$msgRefreshFailedPrefix${msg.detail}"
+    is SnackMsg.SyncFailed           -> prefixed(msgSyncFailedPrefix, msg.detail)
+    is SnackMsg.RefreshFailed        -> prefixed(msgRefreshFailedPrefix, msg.detail)
 }
 
 fun AppStrings.localize(status: GpsStatus): String = when (status) {
