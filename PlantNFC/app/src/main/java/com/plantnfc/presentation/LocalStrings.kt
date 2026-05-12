@@ -12,6 +12,8 @@ data class AppStrings(
     // Generator – plant picker
     val plantSelection: String,
     val plant: String,
+    val plantSearchHint: String,
+    val freeTextOption: String,
     val loadingDots: String,
     val variety: String,
 
@@ -147,6 +149,8 @@ val englishStrings = AppStrings(
     settingsTitle           = "⚙️ Settings",
     plantSelection          = "Plant Selection",
     plant                   = "Plant",
+    plantSearchHint         = "Search by Latin name…",
+    freeTextOption          = "Use as free text:",
     loadingDots             = "Loading…",
     variety                 = "Variety",
     nfcData                 = "NFC Data",
@@ -239,6 +243,8 @@ val hungarianStrings = AppStrings(
     settingsTitle           = "⚙️ Beállítások",
     plantSelection          = "Növény kiválasztás",
     plant                   = "Növény",
+    plantSearchHint         = "Keresés latin névvel…",
+    freeTextOption          = "Szabad szövegként:",
     loadingDots             = "Betöltés…",
     variety                 = "Fajta",
     nfcData                 = "NFC Adatok",
