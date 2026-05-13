@@ -100,7 +100,7 @@ class GoogleSheetsDataSource @Inject constructor(
         maxRedirects: Int = 5,
     ): String {
         var currentUrl = URL(startUrl)
-        var currentMethod = method.uppercase(Locale.US)
+        var currentMethod = method.uppercase(Locale.ROOT)
         var currentBody = body
 
         repeat(maxRedirects) {
