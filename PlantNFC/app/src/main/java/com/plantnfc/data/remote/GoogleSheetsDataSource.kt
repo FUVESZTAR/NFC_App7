@@ -48,7 +48,7 @@ class GoogleSheetsDataSource @Inject constructor(
     suspend fun fetchLastNfcId(): Int? = withContext(Dispatchers.IO) {
         runCatching {
             val writerUrl = prefs.nfcWriterUrl.first().trim()
-            if (writerUrl.isBlank()) return@runCatching null
+            if (writerUrl.isBlank()) throw IOException("Writer URL is empty")
             val body = requestWithRedirects(writerUrl, method = "GET")
             val json = JSONObject(body)
             val lastId = json.opt("lastId")
@@ -95,6 +95,7 @@ class GoogleSheetsDataSource @Inject constructor(
     /**
      * Performs an HTTP request while following redirects manually.
      * For POST requests, redirected follow-up requests are sent as GET, matching browser fetch behavior.
+     * This mirrors Nfcall.html fetch(..., { redirect: 'follow' }) semantics used by the web app.
      */
     private fun requestWithRedirects(
         startUrl: String,
@@ -125,7 +126,11 @@ class GoogleSheetsDataSource @Inject constructor(
                 val location = conn.getHeaderField("Location")
                     ?: throw IOException("Redirect with no Location header")
                 conn.disconnect()
-                currentUrl = URL(currentUrl, location)
+                currentUrl = if (location.matches(Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:.*$"))) {
+                    URL(location)
+                } else {
+                    URL(currentUrl, location)
+                }
                 currentMethod = "GET"
                 currentBody = null
                 return@repeat
