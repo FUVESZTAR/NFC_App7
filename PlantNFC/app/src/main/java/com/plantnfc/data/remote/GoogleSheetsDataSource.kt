@@ -25,6 +25,9 @@ class GoogleSheetsDataSource @Inject constructor(
     companion object {
         // Only load plants that are active in NFC (column CR = Active_in_NFC)
         private const val QUERY = "select A,B,C,D,E where CR = 'Y'"
+        private const val CONNECT_TIMEOUT_MS = 15_000
+        private const val READ_TIMEOUT_MS = 20_000
+        private const val MAX_REDIRECT_ATTEMPTS = 5
     }
 
     // ── Plant list ────────────────────────────────────────────────────────────
@@ -97,7 +100,7 @@ class GoogleSheetsDataSource @Inject constructor(
         startUrl: String,
         method: String,
         body: String? = null,
-        maxRedirects: Int = 5,
+        maxRedirects: Int = MAX_REDIRECT_ATTEMPTS,
     ): String {
         var currentUrl = URL(startUrl)
         var currentMethod = method.uppercase(Locale.ROOT)
@@ -106,8 +109,8 @@ class GoogleSheetsDataSource @Inject constructor(
         repeat(maxRedirects) {
             val conn = currentUrl.openConnection() as HttpURLConnection
             conn.requestMethod = currentMethod
-            conn.connectTimeout = 15_000
-            conn.readTimeout = 20_000
+            conn.connectTimeout = CONNECT_TIMEOUT_MS
+            conn.readTimeout = READ_TIMEOUT_MS
             conn.instanceFollowRedirects = false
             if (currentMethod == "POST" && currentBody != null) {
                 conn.setRequestProperty("Content-Type", "text/plain; charset=utf-8")
