@@ -44,8 +44,9 @@ class GoogleSheetsDataSource @Inject constructor(
     /** GET the Apps Script Web App and return the last used NFC ID, or null on failure. */
     suspend fun fetchLastNfcId(): Int? = withContext(Dispatchers.IO) {
         runCatching {
-            val writerUrl = prefs.nfcWriterUrl.first()
-            val body = URL(writerUrl).readText()
+            val writerUrl = prefs.nfcWriterUrl.first().trim()
+            if (writerUrl.isBlank()) return@runCatching null
+            val body = requestWithRedirects(writerUrl, method = "GET")
             val json = JSONObject(body)
             val lastId = json.opt("lastId")
             if (lastId != null && lastId.toString().isNotBlank()) lastId.toString().toIntOrNull()
@@ -61,8 +62,9 @@ class GoogleSheetsDataSource @Inject constructor(
      */
     suspend fun postNfcRecord(record: NfcRecord): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            val writerUrl    = prefs.nfcWriterUrl.first()
-            val writerSecret = prefs.nfcWriterSecret.first()
+            val writerUrl = prefs.nfcWriterUrl.first().trim()
+            val writerSecret = prefs.nfcWriterSecret.first().trim()
+            if (writerUrl.isBlank()) throw IOException("Writer URL is empty")
             val includeGps   = !record.gpsPacket.isNullOrBlank()
             val includeOther = !record.other.isNullOrBlank()
             val body = JSONObject().apply {
@@ -79,7 +81,7 @@ class GoogleSheetsDataSource @Inject constructor(
                 put("serialNum", record.serialNumber ?: "")
             }.toString()
 
-            val response = postWithRedirects(writerUrl, body)
+            val response = requestWithRedirects(writerUrl, method = "POST", body = body)
             val result = JSONObject(response)
             if (result.optString("status") != "success") {
                 throw Exception(result.optString("error", "Unknown error"))
@@ -88,24 +90,38 @@ class GoogleSheetsDataSource @Inject constructor(
     }
 
     /**
-     * POST body to a URL, following up to 5 redirects manually.
-     * Java's HttpURLConnection converts POST→GET on 302, so we handle redirects ourselves.
+     * Performs an HTTP request while following redirects manually.
+     * For POST requests, redirected follow-up requests are sent as GET, matching browser fetch behavior.
      */
-    private fun postWithRedirects(startUrl: String, body: String, maxRedirects: Int = 5): String {
-        var currentUrl = startUrl
+    private fun requestWithRedirects(
+        startUrl: String,
+        method: String,
+        body: String? = null,
+        maxRedirects: Int = 5,
+    ): String {
+        var currentUrl = URL(startUrl)
+        var currentMethod = method.uppercase(Locale.US)
+        var currentBody = body
+
         repeat(maxRedirects) {
-            val conn = URL(currentUrl).openConnection() as HttpURLConnection
-            conn.requestMethod = "POST"
-            conn.setRequestProperty("Content-Type", "text/plain")
-            conn.doOutput = true
+            val conn = currentUrl.openConnection() as HttpURLConnection
+            conn.requestMethod = currentMethod
+            conn.connectTimeout = 15_000
+            conn.readTimeout = 20_000
             conn.instanceFollowRedirects = false
-            OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { w -> w.write(body) }
+            if (currentMethod == "POST" && currentBody != null) {
+                conn.setRequestProperty("Content-Type", "text/plain; charset=utf-8")
+                conn.doOutput = true
+                OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { w -> w.write(currentBody) }
+            }
             val code = conn.responseCode
             if (code in 300..399) {
                 val location = conn.getHeaderField("Location")
                     ?: throw IOException("Redirect with no Location header")
                 conn.disconnect()
-                currentUrl = location
+                currentUrl = URL(currentUrl, location)
+                currentMethod = "GET"
+                currentBody = null
                 return@repeat
             }
             // Use inputStream for 2xx, errorStream for 4xx/5xx
