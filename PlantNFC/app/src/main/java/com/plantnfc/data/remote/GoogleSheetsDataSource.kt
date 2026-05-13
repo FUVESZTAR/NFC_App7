@@ -13,6 +13,7 @@ import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -32,7 +33,8 @@ class GoogleSheetsDataSource @Inject constructor(
         val sheetId   = prefs.plantSheetId.first()
         val sheetName = prefs.plantSheetName.first()
         val encoded   = URLEncoder.encode(QUERY, "UTF-8")
-        val url = "https://docs.google.com/spreadsheets/d/$sheetId/gviz/tq?tqx=out:json&sheet=$sheetName&tq=$encoded"
+        val encodedSheet = URLEncoder.encode(sheetName, "UTF-8")
+        val url = "https://docs.google.com/spreadsheets/d/$sheetId/gviz/tq?tqx=out:json&sheet=$encodedSheet&tq=$encoded"
         val raw = URL(url).readText()
         parseGvizResponse(raw)
     }
@@ -118,34 +120,55 @@ class GoogleSheetsDataSource @Inject constructor(
     // ── Parsing ───────────────────────────────────────────────────────────────
 
     private fun parseGvizResponse(raw: String): List<Plant> {
-        val jsonStr = raw
-            .substringAfter("google.visualization.Query.setResponse(")
-            .trimEnd(';', ')')
-            .trim()
-        val table = JSONObject(jsonStr).getJSONObject("table")
+        val match = Regex("""google\.visualization\.Query\.setResponse\(([\s\S]*?)\)\s*;?\s*$""")
+            .find(raw)
+            ?: throw IOException(
+                "Failed to parse Google Sheets response: expected " +
+                    "'google.visualization.Query.setResponse(...)' wrapper",
+            )
+        val table = JSONObject(match.groupValues[1]).getJSONObject("table")
         val cols = table.getJSONArray("cols")
         val rows = table.getJSONArray("rows")
 
-        val headers = (0 until cols.length()).map { i ->
-            cols.getJSONObject(i).optString("label").ifEmpty {
-                cols.getJSONObject(i).optString("id")
+        val indexToHeader = (0 until cols.length()).associateWith { columnIndex ->
+            cols.getJSONObject(columnIndex).optString("label").trim().ifEmpty {
+                cols.getJSONObject(columnIndex).optString("id").trim()
             }
         }
 
         return (0 until rows.length()).mapNotNull { ri ->
             val cells = rows.optJSONObject(ri)?.optJSONArray("c") ?: return@mapNotNull null
-            val entry = headers.mapIndexed { ci, h ->
-                h to (cells.optJSONObject(ci)?.opt("v")?.toString() ?: "")
-            }.toMap()
-            if (entry.values.all { it.isBlank() }) return@mapNotNull null
-            Plant(
-                plantId     = entry["Plant_ID"] ?: "",
-                latinName   = entry["LatinName"] ?: "",
-                nameVariety = entry["Name_Variety"] ?: "",
-                nameHu      = entry["Name_HU"] ?: "",
-                nameEn      = entry["Name_EN"] ?: "",
+
+            fun cellText(index: Int): String =
+                cells.optJSONObject(index)?.opt("v")?.toString()?.trim().orEmpty()
+
+            val headerToValue = indexToHeader.entries.associate { (columnIndex, header) ->
+                header to cellText(columnIndex)
+            }
+            if (headerToValue.values.all { it.isBlank() }) return@mapNotNull null
+
+            val lowerCaseHeaders = headerToValue.mapKeys { (header, _) -> header.lowercase(Locale.US) }
+
+            fun byHeaderOrIndex(header: String, fallbackIndex: Int): String {
+                val normalizedHeader = header.lowercase(Locale.US)
+                val value = lowerCaseHeaders[normalizedHeader]
+                return if (!value.isNullOrBlank()) value else cellText(fallbackIndex)
+            }
+
+            val plant = Plant(
+                plantId     = byHeaderOrIndex("Plant_ID", 0),
+                latinName   = byHeaderOrIndex("LatinName", 1),
+                nameVariety = byHeaderOrIndex("Name_Variety", 2),
+                nameHu      = byHeaderOrIndex("Name_HU", 3),
+                nameEn      = byHeaderOrIndex("Name_EN", 4),
                 activeInNfc = true,
             )
+
+            if (plant.plantId.isBlank() && plant.latinName.isBlank() && plant.nameEn.isBlank() && plant.nameHu.isBlank()) {
+                null
+            } else {
+                plant
+            }
         }
     }
 }
