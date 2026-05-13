@@ -25,9 +25,9 @@ class GoogleSheetsDataSource @Inject constructor(
     companion object {
         // Only load plants that are active in NFC (column CR = Active_in_NFC)
         private const val QUERY = "select A,B,C,D,E where CR = 'Y'"
-        private const val CONNECT_TIMEOUT_MS = 15_000
-        private const val READ_TIMEOUT_MS = 20_000
-        private const val MAX_REDIRECT_ATTEMPTS = 5
+        private const val CONNECT_TIMEOUT_MS: Int = 15_000
+        private const val READ_TIMEOUT_MS: Int = 20_000
+        private const val MAX_REDIRECT_ATTEMPTS: Int = 5
     }
 
     // ── Plant list ────────────────────────────────────────────────────────────
@@ -105,6 +105,9 @@ class GoogleSheetsDataSource @Inject constructor(
         var currentUrl = URL(startUrl)
         var currentMethod = method.uppercase(Locale.ROOT)
         var currentBody = body
+        require(currentMethod == "GET" || currentMethod == "POST") {
+            "Unsupported HTTP method: $currentMethod"
+        }
 
         repeat(maxRedirects) {
             val conn = currentUrl.openConnection() as HttpURLConnection
