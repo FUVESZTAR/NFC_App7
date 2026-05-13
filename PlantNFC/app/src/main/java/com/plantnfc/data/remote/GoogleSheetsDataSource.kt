@@ -28,6 +28,7 @@ class GoogleSheetsDataSource @Inject constructor(
         private const val CONNECT_TIMEOUT_MS: Int = 15_000
         private const val READ_TIMEOUT_MS: Int = 20_000
         private const val MAX_REDIRECT_ATTEMPTS: Int = 5
+        private val ABSOLUTE_URL_REGEX = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:.*$")
     }
 
     // ── Plant list ────────────────────────────────────────────────────────────
@@ -103,12 +104,13 @@ class GoogleSheetsDataSource @Inject constructor(
         body: String? = null,
         maxRedirects: Int = MAX_REDIRECT_ATTEMPTS,
     ): String {
-        var currentUrl = URL(startUrl)
-        var currentMethod = method.uppercase(Locale.ROOT)
-        var currentBody = body
-        require(currentMethod == "GET" || currentMethod == "POST") {
-            "Unsupported HTTP method: $currentMethod"
+        val normalizedMethod = method.trim()
+        require(normalizedMethod.equals("GET", ignoreCase = true) || normalizedMethod.equals("POST", ignoreCase = true)) {
+            "Unsupported HTTP method: $method"
         }
+        var currentUrl = URL(startUrl)
+        var currentMethod = normalizedMethod.uppercase(Locale.ROOT)
+        var currentBody = body
 
         repeat(maxRedirects) {
             val conn = currentUrl.openConnection() as HttpURLConnection
@@ -126,7 +128,7 @@ class GoogleSheetsDataSource @Inject constructor(
                 val location = conn.getHeaderField("Location")
                     ?: throw IOException("Redirect with no Location header")
                 conn.disconnect()
-                currentUrl = if (location.matches(Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:.*$"))) {
+                currentUrl = if (location.matches(ABSOLUTE_URL_REGEX)) {
                     URL(location)
                 } else {
                     URL(currentUrl, location)
